@@ -1,0 +1,24 @@
+﻿@page "{id:int}"
+@model Portal_Refeicoes.Pages.Departamentos.DeleteModel
+@{
+    ViewData["Title"] = "Excluir Departamento";
+}
+
+<h1>Excluir</h1>
+<h3>Tem certeza que deseja excluir este departamento?</h3>
+<div>
+    <h4>Departamento</h4>
+    <hr />
+    <dl class="row">
+        <dt class="col-sm-2">ID</dt>
+        <dd class="col-sm-10">@Model.Departamento.Id</dd>
+        <dt class="col-sm-2">Nome</dt>
+        <dd class="col-sm-10">@Model.Departamento.Nome</dd>
+    </dl>
+
+    <form method="post">
+        <input type="hidden" asp-for="Departamento.Id" />
+        <input type="submit" value="Excluir" class="btn btn-danger" /> |
+        <a asp-page="./Index">Voltar</a>
+    </form>
+</div>

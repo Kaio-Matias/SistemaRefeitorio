@@ -5,7 +5,9 @@
         public int Id { get; set; } // Chave Primária
         public string CartaoPonto { get; set; }
         public string Nome { get; set; }
-        public string? FotoUrl { get; set; } // A foto pode ser opcional inicialmente
+        public byte[]? Foto { get; set; } // Armazena a foto como array de bytes
+        public string? AzureId { get; set; } // Armazena o ID retornado pela Azure Face API
+
         public int DepartamentoId { get; set; }
         public Departamento Departamento { get; set; }
 

@@ -1,4 +1,4 @@
-﻿using ApiRefeicoes.Models; // Usando a pasta de Models
+﻿using ApiRefeicoes.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace ApiRefeicoes.Data
@@ -15,14 +15,16 @@ namespace ApiRefeicoes.Data
         public DbSet<RegistroRefeicao> RegistrosRefeicoes { get; set; }
         public DbSet<Usuario> Usuarios { get; set; }
 
+        // ADICIONE ESTE MÉTODO
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // Adiciona uma constraint para garantir que o Cartão de Ponto seja único
-            modelBuilder.Entity<Colaborador>()
-                .HasIndex(c => c.CartaoPonto)
-                .IsUnique();
+            modelBuilder.Entity<RegistroRefeicao>(entity =>
+            {
+                // Isso define o tipo da coluna no SQL Server para aceitar valores como 15.50
+                entity.Property(e => e.ValorRefeicao).HasColumnType("decimal(18, 2)");
+            });
         }
     }
 }

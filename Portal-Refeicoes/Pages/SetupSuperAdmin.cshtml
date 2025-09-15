@@ -1,0 +1,51 @@
+﻿@page
+@model Portal_Refeicoes.Pages.SetupSuperAdminModel
+@{
+    ViewData["Title"] = "Criar SuperAdmin";
+    Layout = "_LayoutLogin"; // Usando o layout simples de login
+}
+
+<div class="container">
+    <div class="row justify-content-center align-items-center" style="height:100vh;">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="card-title text-center">Criar Conta SuperAdmin</h2>
+                    <p class="text-center text-muted">Use esta página apenas uma vez para criar o primeiro administrador.</p>
+                    <hr />
+
+                    @if (Model.SuccessMessage != null)
+                    {
+                        <div class="alert alert-success">@Model.SuccessMessage</div>
+                        <a asp-page="/Login" class="btn btn-primary">Ir para Login</a>
+                    }
+                    @if (Model.ErrorMessage != null)
+                    {
+                        <div class="alert alert-danger">@Model.ErrorMessage</div>
+                    }
+
+                    <form method="post" enctype="multipart/form-data">
+                        <div class="form-group mb-3">
+                            <label asp-for="Input.Nome" class="form-label"></label>
+                            <input asp-for="Input.Nome" class="form-control" />
+                            <span asp-validation-for="Input.Nome" class="text-danger"></span>
+                        </div>
+                        <div class="form-group mb-3">
+                            <label asp-for="Input.Email" class="form-label"></label>
+                            <input asp-for="Input.Email" class="form-control" />
+                            <span asp-validation-for="Input.Email" class="text-danger"></span>
+                        </div>
+                        <div class="form-group mb-3">
+                            <label asp-for="Input.Senha" class="form-label"></label>
+                            <input asp-for="Input.Senha" type="password" class="form-control" />
+                            <span asp-validation-for="Input.Senha" class="text-danger"></span>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-success">Criar SuperAdmin</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

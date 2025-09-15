@@ -1,26 +1,47 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// --- ETAPA 1: Adicionar todos os serviços ANTES do builder.Build() ---
+
 builder.Services.AddRazorPages();
 
+// Configuração do HttpClient para se comunicar com a API
+builder.Services.AddHttpClient("ApiClient", (serviceProvider, client) =>
+{
+    var settings = serviceProvider.GetRequiredService<IConfiguration>();
+    client.BaseAddress = new Uri(settings.GetValue<string>("ApiSettings:BaseUrl"));
+});
+
+// Configuração de Autenticação por Cookies para o Login no Portal
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme) // CORREÇÃO APLICADA AQUI
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/Login";
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+    });
+
+
+// --- ETAPA 2: Construir a aplicação ---
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+
+// --- ETAPA 3: Configurar o pipeline DEPOIS do builder.Build() ---
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
+app.UseStaticFiles();
 
 app.UseRouting();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapStaticAssets();
-app.MapRazorPages()
-   .WithStaticAssets();
+app.MapRazorPages();
 
 app.Run();

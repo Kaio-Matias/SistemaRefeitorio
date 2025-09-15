@@ -1,0 +1,34 @@
+﻿@page
+@model Portal_Refeicoes.Pages.Departamentos.IndexModel
+@{
+    ViewData["Title"] = "Departamentos";
+}
+
+<h1>Departamentos</h1>
+
+<p>
+    <a asp-page="Create" class="btn btn-primary">Novo Departamento</a>
+</p>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Nome</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Model.Departamentos)
+        {
+            <tr>
+                <td>@item.Id</td>
+                <td>@item.Nome</td>
+                <td>
+                    <a asp-page="./Edit" asp-route-id="@item.Id">Editar</a> |
+                    <a asp-page="./Delete" asp-route-id="@item.Id">Excluir</a>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>

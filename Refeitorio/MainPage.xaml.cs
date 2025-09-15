@@ -1,24 +1,21 @@
-﻿namespace Refeitorio
+﻿namespace Refeitorio;
+
+public partial class MainPage : ContentPage
 {
-    public partial class MainPage : ContentPage
+    private readonly IServiceProvider _serviceProvider;
+
+    public MainPage(IServiceProvider serviceProvider)
     {
-        int count = 0;
+        InitializeComponent();
+        _serviceProvider = serviceProvider;
+    }
 
-        public MainPage()
+    private async void OnScanButtonClicked(object sender, TappedEventArgs e)
+    {
+        var cameraPage = _serviceProvider.GetService<CameraPage>();
+        if (cameraPage != null)
         {
-            InitializeComponent();
-        }
-
-        private void OnCounterClicked(object? sender, EventArgs e)
-        {
-            count++;
-
-            if (count == 1)
-                CounterBtn.Text = $"Clicked {count} time";
-            else
-                CounterBtn.Text = $"Clicked {count} times";
-
-            SemanticScreenReader.Announce(CounterBtn.Text);
+            await Navigation.PushAsync(cameraPage);
         }
     }
 }

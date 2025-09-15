@@ -1,50 +1,123 @@
-﻿<!DOCTYPE html>
-<html lang="en">
+﻿@inject Microsoft.AspNetCore.Mvc.IViewComponentHelper Component
+@functions {
+    // Função auxiliar para determinar a página atual e destacar o link ativo no menu
+    public string IsPageActive(string page)
+    {
+        // O "?." é um operador null-conditional para evitar erros se a página não for encontrada
+        return ViewContext.RouteData.Values["Page"]?.ToString().StartsWith(page) ?? false ? "active" : "";
+    }
+}
+
+<!DOCTYPE html>
+<html lang="pt-br">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - Portal_Refeicoes</title>
-    <script type="importmap"></script>
+    <title>@ViewData["Title"] - Portal de Gestão</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/Portal_Refeicoes.styles.css" asp-append-version="true" />
 </head>
 <body>
     <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
-            <div class="container">
-                <a class="navbar-brand" asp-area="" asp-page="/Index">Portal_Refeicoes</a>
+        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-dark bg-dark border-bottom box-shadow">
+            <div class="container-fluid">
+                <a class="navbar-brand" asp-area="" asp-page="/Index">Portal de Gestão</a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
                         aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
-                    <ul class="navbar-nav flex-grow-1">
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-page="/Index">Home</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-page="/Privacy">Privacy</a>
-                        </li>
-                    </ul>
+                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-end">
+                    <div class="navbar-nav">
+                        @if (User.Identity.IsAuthenticated)
+                        {
+                            <span class="navbar-text me-3 text-white">
+                                Olá, @User.Identity.Name!
+                            </span>
+                            <form class="form-inline" method="post" asp-page="/Logout">
+                                <button type="submit" class="nav-item btn btn-link text-white">Sair</button>
+                            </form>
+                        }
+                    </div>
                 </div>
             </div>
         </nav>
     </header>
-    <div class="container">
-        <main role="main" class="pb-3">
-            @RenderBody()
-        </main>
+
+    <div class="container-fluid">
+        <div class="row">
+            <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse">
+                <div class="position-sticky pt-3">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link @IsPageActive("/Index")" aria-current="page" asp-page="/Index">
+                                <i data-feather="home"></i>
+                                Dashboard
+                            </a>
+                        </li>
+                        <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
+                            <span>Gestão</span>
+                        </h6>
+                        <li class="nav-item">
+                            <a class="nav-link @IsPageActive("/Colaboradores")" asp-page="/Colaboradores/Index">
+                                <i data-feather="users"></i>
+                                Colaboradores
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @IsPageActive("/Departamentos")" asp-page="/Departamentos/Index">
+                                <i data-feather="briefcase"></i>
+                                Departamentos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @IsPageActive("/Funcoes")" asp-page="/Funcoes/Index">
+                                <i data-feather="award"></i>
+                                Funções
+                            </a>
+                        </li>
+
+                        @if (User.IsInRole("SuperAdmin"))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link @IsPageActive("/Usuarios")" asp-page="/Usuarios/Index">
+                                    <i data-feather="user-check"></i>
+                                    Usuários do Sistema
+                                </a>
+                            </li>
+                        }
+                    </ul>
+
+                    <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
+                        <span>Relatórios</span>
+                    </h6>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item">
+                            <a class="nav-link" href="#">
+                                <i data-feather="file-text"></i>
+                                Registros de Refeições
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">@ViewData["Title"]</h1>
+                </div>
+                @RenderBody()
+            </main>
+        </div>
     </div>
 
-    <footer class="border-top footer text-muted">
-        <div class="container">
-            &copy; 2025 - Portal_Refeicoes - <a asp-area="" asp-page="/Privacy">Privacy</a>
-        </div>
-    </footer>
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script>
+        feather.replace()
+    </script>
     <script src="~/js/site.js" asp-append-version="true"></script>
 
     @await RenderSectionAsync("Scripts", required: false)
