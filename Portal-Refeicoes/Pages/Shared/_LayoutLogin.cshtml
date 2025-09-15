@@ -1,5 +1,5 @@
 ﻿<!DOCTYPE html>
-<html lang="en">
+<html lang="pt-br">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,15 +7,28 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
-<body>
-    <div class="container">
-        <main role="main" class="pb-3">
-            @RenderBody()
-        </main>
+<body class="login-page-body">
+
+    <div class="container-fluid h-100">
+        <div class="row h-100">
+            <div class="col-lg-9 d-none d-lg-block login-image-section">
+            </div>
+
+            <div class="col-lg-3 col-md-12 login-form-section">
+                <main role="main" class="w-100 h-100 d-flex justify-content-center">
+                    @RenderBody()
+                </main>
+            </div>
+        </div>
     </div>
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script>
+        feather.replace()
+    </script>
+
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

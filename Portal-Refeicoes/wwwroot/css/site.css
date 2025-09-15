@@ -81,3 +81,85 @@ body {
     font-size: .75rem;
     text-transform: uppercase;
 }
+/* --- Estilos da Página de Login (FUNDO LARANJA) --- */
+
+/* Garante que o layout ocupe toda a altura da viewport */
+html, .login-page-body, .login-page-body > .container-fluid {
+    height: 100%;
+}
+
+/* Coluna da imagem (esquerda) */
+.login-image-section {
+    background-image: url('../img/background.png');
+    /* A propriedade 'contain' faz a imagem caber inteira no container */
+    background-size: contain;
+    /* Impede que a imagem se repita caso sobre espaço */
+    background-repeat: no-repeat;
+    /* Centraliza a imagem no meio da coluna */
+    background-position: center;
+}
+/* Coluna do formulário (direita) com fundo laranja */
+.login-form-section {
+    background-color: #DE7913; /* Cor de fundo laranja solicitada */
+}
+
+/* Container do formulário */
+/* Container do formulário - Ajustado para subir na tela */
+.login-form-container {
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+    align-self: flex-start; /* Alinha o formulário no topo da coluna */
+    margin-top: 20vh; /* Distância do topo (ajuste se precisar) */
+}
+
+.login-title {
+    font-weight: 600;
+    color: #ffffff; /* Título "Login" em branco */
+}
+
+/* Estilo dos inputs com ícones (fundo branco, sem bordas) */
+.login-form-container .input-group {
+    border-radius: 0.3rem;
+    overflow: hidden; /* Garante que os cantos arredondados sejam aplicados */
+}
+
+.login-form-container .input-group-text {
+    background-color: #ffffff;
+    border: none;
+    padding: 0.75rem;
+}
+
+.login-form-container .input-group .form-control {
+    background-color: #ffffff;
+    border: none;
+    box-shadow: none;
+    padding: 0.75rem 1rem;
+}
+
+/* Ícones dentro dos inputs */
+.input-group-text i {
+    width: 20px;
+    height: 20px;
+    color: #6c757d; /* Cor cinza para os ícones */
+}
+
+/* Botão de login (fundo branco com texto laranja) */
+.btn-login {
+    padding: 0.8rem 5rem; /* Define a largura do botão através do preenchimento lateral */
+    font-weight: bold;
+    font-size: 1rem;
+    border-radius: 0.3rem;
+    color: #DE7913; /* Texto do botão em laranja */
+    background-color: #ffffff; /* Fundo do botão em branco */
+    border: none;
+    text-transform: uppercase;
+    transition: all 0.2s ease-in-out;
+}
+
+    .btn-login:hover {
+        color: #DE7913;
+        background-color: #f2f2f2; /* Leve escurecida no hover */
+        transform: scale(1.02); /* Efeito de crescimento sutil */
+    }
