@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ApiRefeicoes.Migrations
 {
     [DbContext(typeof(ApiRefeicoesDbContext))]
-    [Migration("20250912115203_AdjustValorRefeicaoDecimalPrecision")]
-    partial class AdjustValorRefeicaoDecimalPrecision
+    [Migration("20250919155428_MIgracaoInicial")]
+    partial class MIgracaoInicial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -24,31 +24,6 @@ namespace ApiRefeicoes.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
-
-            modelBuilder.Entity("ApiRefeicoes.Models.Cardapio", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("CaminhoArquivo")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("DataUpload")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("NomeArquivo")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Cardapios");
-                });
 
             modelBuilder.Entity("ApiRefeicoes.Models.Colaborador", b =>
                 {
@@ -63,7 +38,7 @@ namespace ApiRefeicoes.Migrations
 
                     b.Property<string>("CartaoPonto")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("DepartamentoId")
                         .HasColumnType("int");
@@ -79,9 +54,6 @@ namespace ApiRefeicoes.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("CartaoPonto")
-                        .IsUnique();
 
                     b.HasIndex("DepartamentoId");
 
@@ -104,6 +76,39 @@ namespace ApiRefeicoes.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Departamentos");
+                });
+
+            modelBuilder.Entity("ApiRefeicoes.Models.Dispositivo", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("DeviceIdentifier")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<bool>("IsAtivo")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("UltimoLogin")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId", "DeviceIdentifier")
+                        .IsUnique();
+
+                    b.ToTable("Dispositivos");
                 });
 
             modelBuilder.Entity("ApiRefeicoes.Models.Funcao", b =>
@@ -141,7 +146,7 @@ namespace ApiRefeicoes.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<decimal>("ValorRefeicao")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.HasKey("Id");
 
@@ -161,9 +166,6 @@ namespace ApiRefeicoes.Migrations
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<byte[]>("FotoPerfil")
-                        .HasColumnType("varbinary(max)");
 
                     b.Property<string>("Nome")
                         .IsRequired()
@@ -201,6 +203,17 @@ namespace ApiRefeicoes.Migrations
                     b.Navigation("Funcao");
                 });
 
+            modelBuilder.Entity("ApiRefeicoes.Models.Dispositivo", b =>
+                {
+                    b.HasOne("ApiRefeicoes.Models.Usuario", "Usuario")
+                        .WithMany("Dispositivos")
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("ApiRefeicoes.Models.RegistroRefeicao", b =>
                 {
                     b.HasOne("ApiRefeicoes.Models.Colaborador", "Colaborador")
@@ -210,6 +223,11 @@ namespace ApiRefeicoes.Migrations
                         .IsRequired();
 
                     b.Navigation("Colaborador");
+                });
+
+            modelBuilder.Entity("ApiRefeicoes.Models.Usuario", b =>
+                {
+                    b.Navigation("Dispositivos");
                 });
 #pragma warning restore 612, 618
         }

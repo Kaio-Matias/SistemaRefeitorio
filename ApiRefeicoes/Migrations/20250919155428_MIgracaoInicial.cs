@@ -6,26 +6,11 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace ApiRefeicoes.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreat : Migration
+    public partial class MIgracaoInicial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "Cardapios",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    NomeArquivo = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: false),
-                    CaminhoArquivo = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    DataUpload = table.Column<DateTime>(type: "datetime2", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Cardapios", x => x.Id);
-                });
-
             migrationBuilder.CreateTable(
                 name: "Departamentos",
                 columns: table => new
@@ -61,8 +46,7 @@ namespace ApiRefeicoes.Migrations
                     Nome = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Email = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     SenhaHash = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Role = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    FotoPerfil = table.Column<byte[]>(type: "varbinary(max)", nullable: true)
+                    Role = table.Column<string>(type: "nvarchar(max)", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -75,7 +59,7 @@ namespace ApiRefeicoes.Migrations
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    CartaoPonto = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    CartaoPonto = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Nome = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Foto = table.Column<byte[]>(type: "varbinary(max)", nullable: true),
                     AzureId = table.Column<string>(type: "nvarchar(max)", nullable: true),
@@ -95,6 +79,29 @@ namespace ApiRefeicoes.Migrations
                         name: "FK_Colaboradores_Funcoes_FuncaoId",
                         column: x => x.FuncaoId,
                         principalTable: "Funcoes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Dispositivos",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    DeviceIdentifier = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    Nome = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    UltimoLogin = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    IsAtivo = table.Column<bool>(type: "bit", nullable: false),
+                    UsuarioId = table.Column<int>(type: "int", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Dispositivos", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Dispositivos_Usuarios_UsuarioId",
+                        column: x => x.UsuarioId,
+                        principalTable: "Usuarios",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -122,12 +129,6 @@ namespace ApiRefeicoes.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Colaboradores_CartaoPonto",
-                table: "Colaboradores",
-                column: "CartaoPonto",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
                 name: "IX_Colaboradores_DepartamentoId",
                 table: "Colaboradores",
                 column: "DepartamentoId");
@@ -136,6 +137,12 @@ namespace ApiRefeicoes.Migrations
                 name: "IX_Colaboradores_FuncaoId",
                 table: "Colaboradores",
                 column: "FuncaoId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Dispositivos_UsuarioId_DeviceIdentifier",
+                table: "Dispositivos",
+                columns: new[] { "UsuarioId", "DeviceIdentifier" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_RegistrosRefeicoes_ColaboradorId",
@@ -147,7 +154,7 @@ namespace ApiRefeicoes.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "Cardapios");
+                name: "Dispositivos");
 
             migrationBuilder.DropTable(
                 name: "RegistrosRefeicoes");

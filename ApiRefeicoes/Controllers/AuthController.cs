@@ -1,66 +1,76 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿// ApiRefeicoes/Controllers/AuthController.cs
+
 using ApiRefeicoes.Data;
-using Microsoft.EntityFrameworkCore;
 using ApiRefeicoes.Models;
 using ApiRefeicoes.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Threading.Tasks;
 
 namespace ApiRefeicoes.Controllers
 {
-    [ApiController]
+    // NOVO DTO (Data Transfer Object) para o request de login
+    public class LoginRequest
+    {
+        public string Email { get; set; }
+        public string Senha { get; set; }
+        public string DeviceIdentifier { get; set; }
+        public string NomeDispositivo { get; set; }
+    }
+
     [Route("api/[controller]")]
+    [ApiController]
     public class AuthController : ControllerBase
     {
         private readonly ApiRefeicoesDbContext _context;
         private readonly TokenService _tokenService;
-        private readonly ILogger<AuthController> _logger;
 
-        // Modificamos o construtor para receber o ILogger
-        public AuthController(ApiRefeicoesDbContext context, IConfiguration configuration, ILogger<AuthController> logger)
+        public AuthController(ApiRefeicoesDbContext context, TokenService tokenService)
         {
             _context = context;
-            _tokenService = new TokenService(configuration);
-            _logger = logger;
+            _tokenService = tokenService;
         }
 
+        // MÉTODO DE LOGIN ATUALIZADO
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
+        public async Task<IActionResult> Login([FromBody] LoginRequest loginRequest)
         {
-            _logger.LogInformation("Tentativa de login para o email: {Email}", loginDto.Email);
+            var user = await _context.Usuarios.SingleOrDefaultAsync(u => u.Email == loginRequest.Email);
 
-            var usuario = await _context.Usuarios
-                .FirstOrDefaultAsync(u => u.Email == loginDto.Email);
-
-            if (usuario == null)
+            if (user == null || !BCrypt.Net.BCrypt.Verify(loginRequest.Senha, user.SenhaHash))
             {
-                // Se este log aparecer, o email está errado ou não existe no banco
-                _logger.LogWarning("FALHA NO LOGIN: Usuário com email '{Email}' NÃO ENCONTRADO no banco de dados.", loginDto.Email);
-                return Unauthorized(new { message = "Email ou senha inválidos." });
+                return Unauthorized("Email ou senha inválidos.");
             }
 
-            // Verificamos a senha
-            bool isPasswordValid = BCrypt.Net.BCrypt.Verify(loginDto.Password, usuario.SenhaHash);
+            // Lógica para registrar o dispositivo
+            var dispositivo = await _context.Dispositivos
+                .FirstOrDefaultAsync(d => d.UsuarioId == user.Id && d.DeviceIdentifier == loginRequest.DeviceIdentifier);
 
-            if (!isPasswordValid)
+            if (dispositivo == null)
             {
-                // Se este log aparecer, o email foi encontrado, mas a senha está errada
-                _logger.LogWarning("FALHA NO LOGIN: Senha INCORRETA para o usuário '{Email}'.", loginDto.Email);
-                return Unauthorized(new { message = "Email ou senha inválidos." });
+                // Se o dispositivo não existe, cria um novo registro
+                dispositivo = new Dispositivo
+                {
+                    UsuarioId = user.Id,
+                    DeviceIdentifier = loginRequest.DeviceIdentifier,
+                    Nome = loginRequest.NomeDispositivo,
+                    UltimoLogin = DateTime.UtcNow,
+                    IsAtivo = true
+                };
+                _context.Dispositivos.Add(dispositivo);
+            }
+            else
+            {
+                // Se já existe, apenas atualiza a data do último login e reativa
+                dispositivo.UltimoLogin = DateTime.UtcNow;
+                dispositivo.IsAtivo = true;
+                _context.Dispositivos.Update(dispositivo);
             }
 
-            _logger.LogInformation("Login bem-sucedido para o usuário '{Email}'. Gerando token.", loginDto.Email);
-            var token = _tokenService.GenerateToken(usuario);
+            await _context.SaveChangesAsync();
 
-            return Ok(new
-            {
-                user = new { usuario.Email, usuario.Nome, usuario.Role },
-                token
-            });
+            var token = _tokenService.GenerateToken(user);
+            return Ok(new { token });
         }
-    }
-
-    public class LoginDto
-    {
-        public string Email { get; set; }
-        public string Password { get; set; }
     }
 }

@@ -55,7 +55,6 @@ namespace ApiRefeicoes.Controllers
             {
                 using var memoryStream = new MemoryStream();
                 await usuarioDto.FotoPerfilFile.CopyToAsync(memoryStream);
-                usuario.FotoPerfil = memoryStream.ToArray();
             }
 
             _context.Usuarios.Add(usuario);
@@ -81,7 +80,6 @@ namespace ApiRefeicoes.Controllers
 
             using var memoryStream = new MemoryStream();
             await fotoFile.CopyToAsync(memoryStream);
-            usuario.FotoPerfil = memoryStream.ToArray();
 
             _context.Entry(usuario).State = EntityState.Modified;
             await _context.SaveChangesAsync();

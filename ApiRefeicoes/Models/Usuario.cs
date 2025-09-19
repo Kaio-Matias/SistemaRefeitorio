@@ -7,6 +7,6 @@
         public string Email { get; set; }
         public string SenhaHash { get; set; }
         public string Role { get; set; }
-        public byte[]? FotoPerfil { get; set; } // Alterado para array de bytes
+        public virtual ICollection<Dispositivo> Dispositivos { get; set; } = new List<Dispositivo>();
     }
 }
