@@ -9,13 +9,12 @@ using System.Threading.Tasks;
 
 namespace ApiRefeicoes.Controllers
 {
-    // NOVO DTO (Data Transfer Object) para o request de login
     public class LoginRequest
     {
         public string Email { get; set; }
         public string Senha { get; set; }
-        public string DeviceIdentifier { get; set; }
-        public string NomeDispositivo { get; set; }
+        public string? DeviceIdentifier { get; set; } // Opcional
+        public string? NomeDispositivo { get; set; } // Opcional
     }
 
     [Route("api/[controller]")]
@@ -31,7 +30,6 @@ namespace ApiRefeicoes.Controllers
             _tokenService = tokenService;
         }
 
-        // MÉTODO DE LOGIN ATUALIZADO
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest loginRequest)
         {
@@ -42,35 +40,40 @@ namespace ApiRefeicoes.Controllers
                 return Unauthorized("Email ou senha inválidos.");
             }
 
-            // Lógica para registrar o dispositivo
-            var dispositivo = await _context.Dispositivos
-                .FirstOrDefaultAsync(d => d.UsuarioId == user.Id && d.DeviceIdentifier == loginRequest.DeviceIdentifier);
+            if (!string.IsNullOrEmpty(loginRequest.DeviceIdentifier))
+            {
+                var dispositivo = await _context.Dispositivos
+                    .FirstOrDefaultAsync(d => d.UsuarioId == user.Id && d.DeviceIdentifier == loginRequest.DeviceIdentifier);
 
-            if (dispositivo == null)
-            {
-                // Se o dispositivo não existe, cria um novo registro
-                dispositivo = new Dispositivo
+                if (dispositivo == null)
                 {
-                    UsuarioId = user.Id,
-                    DeviceIdentifier = loginRequest.DeviceIdentifier,
-                    Nome = loginRequest.NomeDispositivo,
-                    UltimoLogin = DateTime.UtcNow,
-                    IsAtivo = true
-                };
-                _context.Dispositivos.Add(dispositivo);
-            }
-            else
-            {
-                // Se já existe, apenas atualiza a data do último login e reativa
-                dispositivo.UltimoLogin = DateTime.UtcNow;
-                dispositivo.IsAtivo = true;
-                _context.Dispositivos.Update(dispositivo);
+                    dispositivo = new Dispositivo
+                    {
+                        UsuarioId = user.Id,
+                        DeviceIdentifier = loginRequest.DeviceIdentifier,
+                        Nome = loginRequest.NomeDispositivo,
+                        UltimoLogin = DateTime.UtcNow,
+                        IsAtivo = true
+                    };
+                    _context.Dispositivos.Add(dispositivo);
+                }
+                else
+                {
+                    dispositivo.UltimoLogin = DateTime.UtcNow;
+                    dispositivo.IsAtivo = true;
+                    _context.Dispositivos.Update(dispositivo);
+                }
             }
 
             await _context.SaveChangesAsync();
 
             var token = _tokenService.GenerateToken(user);
-            return Ok(new { token });
+
+            return Ok(new
+            {
+                User = new { user.Email, user.Nome, user.Role },
+                Token = token
+            });
         }
     }
 }

@@ -1,27 +1,23 @@
+// ApiRefeicoes/Program.cs
+
 using ApiRefeicoes.Data;
 using ApiRefeicoes.Services;
-using Microsoft.EntityFrameworkCore;
-using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- PASSO 1: ADICIONAR SERVIÇOS (Ingredientes) ---
+// Adicionar serviços ao contêiner.
+builder.Services.AddControllers();
 
-// Configuração do DbContext para o Entity Framework
+// Configuração do DbContext para o Entity Framework Core
 builder.Services.AddDbContext<ApiRefeicoesDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Registro dos nossos serviços customizados
-builder.Services.AddScoped<FaceApiService>();
-// Futuramente, o TokenService também pode ser registrado aqui se preferir.
-
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-// ## CÓDIGO DE AUTENTICAÇÃO JWT DEVE FICAR AQUI ##
+// Configuração da autenticação JWT
+var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]);
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -29,37 +25,46 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
+    options.RequireHttpsMetadata = false;
+    options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        ValidAudience = builder.Configuration["Jwt:Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ValidateIssuer = false, // Em produção, considere validar o Issuer
+        ValidateAudience = false // Em produção, considere validar a Audience
     };
 });
-builder.Services.AddAuthorization();
 
 
-// --- PASSO 2: CONSTRUIR A APLICAÇÃO (Assar o bolo) ---
+// ==================================================================
+// INÍCIO DA CORREÇÃO
+// ==================================================================
+// Registrando o TokenService no sistema de injeção de dependência.
+// Esta linha informa à API como criar o TokenService quando ele for necessário.
+builder.Services.AddScoped<TokenService>();
+// ==================================================================
+// FIM DA CORREÇÃO
+// ==================================================================
+
+
+// Configuração do Swagger/OpenAPI
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
 var app = builder.Build();
 
-
-// --- PASSO 3: CONFIGURAR O PIPELINE DE REQUISIÇÕES (Decorar o bolo) ---
-
-// Configure the HTTP request pipeline.
+// Configurar o pipeline de requisições HTTP.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.UseDeveloperExceptionPage(); // Adiciona a página de exceção de desenvolvedor
 }
 
 app.UseHttpsRedirection();
 
-// ## AS CHAMADAS "USE" DE AUTENTICAÇÃO DEVEM FICAR AQUI ##
-// Importante: UseAuthentication() deve vir ANTES de UseAuthorization()
+// Adiciona o middleware de autenticação e autorização
 app.UseAuthentication();
 app.UseAuthorization();
 

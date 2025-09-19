@@ -1,3 +1,5 @@
+// Portal-Refeicoes/Pages/Login.cshtml.cs
+
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
@@ -35,7 +37,6 @@ namespace Portal_Refeicoes.Pages
 
         public async Task<IActionResult> OnGetAsync()
         {
-            // Se o usuário já está logado, redireciona para a home
             if (User.Identity.IsAuthenticated)
             {
                 return RedirectToPage("/Index");
@@ -51,7 +52,18 @@ namespace Portal_Refeicoes.Pages
             }
 
             var client = _clientFactory.CreateClient("ApiClient");
-            var response = await client.PostAsJsonAsync("/api/auth/login", Input);
+
+            // ==================================================================
+            // INÍCIO DA CORREÇÃO
+            // ==================================================================
+            // Criamos um objeto anônimo para garantir que o JSON enviado
+            // tenha as propriedades "Email" e "Senha", exatamente como a API espera.
+            var loginPayload = new { Email = Input.Email, Senha = Input.Password };
+
+            var response = await client.PostAsJsonAsync("api/auth/login", loginPayload);
+            // ==================================================================
+            // FIM DA CORREÇÃO
+            // ==================================================================
 
             if (response.IsSuccessStatusCode)
             {
@@ -63,7 +75,7 @@ namespace Portal_Refeicoes.Pages
                     new Claim(ClaimTypes.Email, authResult.User.Email),
                     new Claim(ClaimTypes.Name, authResult.User.Nome),
                     new Claim(ClaimTypes.Role, authResult.User.Role),
-                    new Claim("access_token", authResult.Token) // Armazenamos o token aqui
+                    new Claim("access_token", authResult.Token)
                 };
 
                 var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -82,7 +94,7 @@ namespace Portal_Refeicoes.Pages
         }
     }
 
-    // Classes auxiliares para deserializar a resposta do login
+    // Classes auxiliares para deserializar a resposta da API
     public class AuthResult
     {
         public UserInfo User { get; set; }
