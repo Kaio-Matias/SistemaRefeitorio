@@ -1,6 +1,4 @@
-﻿// ApiRefeicoes/Controllers/AuthController.cs
-
-using ApiRefeicoes.Data;
+﻿using ApiRefeicoes.Data;
 using ApiRefeicoes.Models;
 using ApiRefeicoes.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -11,10 +9,10 @@ namespace ApiRefeicoes.Controllers
 {
     public class LoginRequest
     {
-        public string Email { get; set; }
-        public string Senha { get; set; }
-        public string? DeviceIdentifier { get; set; } // Opcional
-        public string? NomeDispositivo { get; set; } // Opcional
+        public string? Email { get; set; }
+        public string? Senha { get; set; }
+        public string? DeviceIdentifier { get; set; } 
+        public string? NomeDispositivo { get; set; } 
     }
 
     [Route("api/[controller]")]
