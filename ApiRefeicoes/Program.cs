@@ -9,7 +9,7 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Adicionar serviços ao contêiner.
+// Adicionar services ao contêiner.
 builder.Services.AddControllers();
 
 // Configuração do DbContext para o Entity Framework Core
@@ -40,9 +40,10 @@ builder.Services.AddAuthentication(options =>
 // ==================================================================
 // INÍCIO DA CORREÇÃO
 // ==================================================================
-// Registrando o TokenService no sistema de injeção de dependência.
-// Esta linha informa à API como criar o TokenService quando ele for necessário.
+// Registrando os serviços no sistema de injeção de dependência.
+// Estas linhas informam à API como criar os serviços quando eles forem necessários.
 builder.Services.AddScoped<TokenService>();
+builder.Services.AddScoped<FaceApiService>(); // <-- ADICIONE ESTA LINHA
 // ==================================================================
 // FIM DA CORREÇÃO
 // ==================================================================

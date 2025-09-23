@@ -1,93 +1,97 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using ApiRefeicoes.Data;
+﻿using ApiRefeicoes.Data;
+using ApiRefeicoes.Models;
 using ApiRefeicoes.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Threading.Tasks;
 
 namespace ApiRefeicoes.Controllers
 {
-    [Route("api/[controller]")]
     [ApiController]
+    [Route("api/[controller]")]
     public class ReconhecimentoController : ControllerBase
     {
-        private readonly ApiRefeicoesDbContext _context;
         private readonly FaceApiService _faceApiService;
+        private readonly ApiRefeicoesDbContext _context;
 
-        public ReconhecimentoController(ApiRefeicoesDbContext context, FaceApiService faceApiService)
+        public ReconhecimentoController(FaceApiService faceApiService, ApiRefeicoesDbContext context)
         {
-            _context = context;
             _faceApiService = faceApiService;
+            _context = context;
         }
 
-        [HttpPost("verificar")]
-        public async Task<IActionResult> VerificarColaborador([FromForm] ReconhecimentoDto reconhecimentoDto)
+        [HttpPost("verify")]
+        public async Task<IActionResult> VerifyFaces([FromForm] IFormFile file1, [FromForm] IFormFile file2)
         {
-            // 1. Validar a requisição
-            if (reconhecimentoDto.FotoFile == null || reconhecimentoDto.FotoFile.Length == 0)
+            if (file1 == null || file2 == null)
             {
-                return BadRequest("Nenhuma foto foi enviada.");
+                return BadRequest("Duas imagens são necessárias.");
             }
 
-            // 2. Encontrar o colaborador pelo cartão de ponto
-            var colaborador = await _context.Colaboradores
-                .FirstOrDefaultAsync(c => c.CartaoPonto == reconhecimentoDto.CartaoPonto);
+            using var memoryStream1 = new MemoryStream();
+            await file1.CopyToAsync(memoryStream1);
+            var imageBytes1 = memoryStream1.ToArray();
+
+            using var memoryStream2 = new MemoryStream();
+            await file2.CopyToAsync(memoryStream2);
+            var imageBytes2 = memoryStream2.ToArray();
+
+            var faceId1 = await _faceApiService.DetectFaceAndGetId(imageBytes1);
+            var faceId2 = await _faceApiService.DetectFaceAndGetId(imageBytes2);
+
+            if (string.IsNullOrEmpty(faceId1) || string.IsNullOrEmpty(faceId2))
+            {
+                return BadRequest("Não foi possível detectar faces em uma ou ambas as imagens.");
+            }
+
+            var (isIdentical, confidence) = await _faceApiService.VerifyFaces(faceId1, faceId2);
+
+            return Ok(new { isIdentical, confidence });
+        }
+
+        // ==================================================================
+        // INÍCIO DO NOVO CÓDIGO
+        // ==================================================================
+        [HttpPost("registrar-refeicao")]
+        public async Task<IActionResult> RegistrarRefeicao(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(new { Sucesso = false, Mensagem = "Nenhum arquivo de imagem enviado." });
+            }
+
+            using var memoryStream = new MemoryStream();
+            await file.CopyToAsync(memoryStream);
+            var imageBytes = memoryStream.ToArray();
+
+            var azureId = await _faceApiService.DetectFaceAndGetId(imageBytes);
+
+            if (string.IsNullOrEmpty(azureId))
+            {
+                return BadRequest(new { Sucesso = false, Mensagem = "Nenhuma face detectada na imagem ou erro na API do Azure." });
+            }
+
+            var colaborador = await _context.Colaboradores.FirstOrDefaultAsync(c => c.AzureId == azureId);
 
             if (colaborador == null)
             {
-                return NotFound("Colaborador não encontrado com este cartão de ponto.");
+                return NotFound(new { Sucesso = false, Mensagem = "Colaborador não encontrado com a face detectada." });
             }
 
-            if (colaborador.Foto == null || colaborador.Foto.Length == 0)
+            var registro = new RegistroRefeicao
             {
-                return BadRequest("Colaborador não possui foto de cadastro para comparação.");
-            }
+                ColaboradorId = colaborador.Id,
+                HorarioRegistro = DateTime.Now,
+                ValorRefeicao = 17
+            };
 
-            // 3. Converter a foto recebida para bytes
-            using var memoryStream = new MemoryStream();
-            await reconhecimentoDto.FotoFile.CopyToAsync(memoryStream);
-            var fotoRecebidaBytes = memoryStream.ToArray();
+            _context.RegistrosRefeicoes.Add(registro);
+            await _context.SaveChangesAsync();
 
-            // 4. Detectar as faces em ambas as imagens para obter os faceIds
-            var faceIdFotoRecebida = await _faceApiService.DetectFaceAndGetId(fotoRecebidaBytes);
-            if (faceIdFotoRecebida == null)
-            {
-                return BadRequest("Não foi possível detectar um rosto na foto enviada.");
-            }
-
-            var faceIdFotoCadastro = await _faceApiService.DetectFaceAndGetId(colaborador.Foto);
-            if (faceIdFotoCadastro == null)
-            {
-                return BadRequest("Não foi possível detectar um rosto na foto de cadastro do colaborador.");
-            }
-
-            // 5. Comparar as duas faces usando o serviço da Azure
-            var (isIdentical, confidence) = await _faceApiService.VerifyFaces(faceIdFotoRecebida, faceIdFotoCadastro);
-
-            // 6. Retornar o resultado
-            if (isIdentical)
-            {
-                // Aqui você pode adicionar a lógica para registrar a refeição
-                return Ok(new
-                {
-                    message = "Verificação facial bem-sucedida!",
-                    colaborador = colaborador.Nome,
-                    confianca = confidence
-                });
-            }
-            else
-            {
-                return Unauthorized(new
-                {
-                    message = "Reconhecimento facial falhou. As faces não correspondem.",
-                    confianca = confidence
-                });
-            }
+            return Ok(new { Sucesso = true, Mensagem = $"Refeição registrada com sucesso para o colaborador: {colaborador.Nome}" });
         }
-    }
-
-    // DTO para receber os dados do app .NET MAUI
-    public class ReconhecimentoDto
-    {
-        public string CartaoPonto { get; set; }
-        public IFormFile FotoFile { get; set; }
+        // ==================================================================
+        // FIM DO NOVO CÓDIGO
+        // ==================================================================
     }
 }
