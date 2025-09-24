@@ -3,9 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using ApiRefeicoes.Data;
 using ApiRefeicoes.Models;
 using ApiRefeicoes.Services;
+using Microsoft.AspNetCore.Authorization;
 
 namespace ApiRefeicoes.Controllers
 {
+    [Authorize] // Protege todo o controlador, exigindo um token válido
     [Route("api/[controller]")]
     [ApiController]
     public class IdentificacaoController : ControllerBase
@@ -26,7 +28,7 @@ namespace ApiRefeicoes.Controllers
         {
             if (fotoFile == null || fotoFile.Length == 0)
             {
-                return BadRequest(new { message = "Nenhuma foto foi enviada." });
+                return BadRequest(new { Sucesso = false, Mensagem = "Nenhuma foto foi enviada." });
             }
 
             using var memoryStream = new MemoryStream();
@@ -35,9 +37,18 @@ namespace ApiRefeicoes.Controllers
 
             var azureIdDetectado = await _faceApiService.DetectFaceAndGetId(imageBytes);
 
+            // ==================================================================
+            // INÍCIO DA LINHA DE LOG PARA DEPURAÇÃO
+            // ==================================================================
+            _logger.LogInformation("Azure ID detectado pela API de Face: {AzureId}", string.IsNullOrEmpty(azureIdDetectado) ? "NENHUM" : azureIdDetectado);
+            // ==================================================================
+            // FIM DA LINHA DE LOG
+            // ==================================================================
+
             if (string.IsNullOrEmpty(azureIdDetectado))
             {
-                return NotFound(new { message = "Nenhum rosto foi detetado na imagem." });
+                _logger.LogWarning("Nenhum rosto foi detectado na imagem enviada.");
+                return NotFound(new { Sucesso = false, Mensagem = "Rosto não reconhecido." });
             }
 
             var colaborador = await _context.Colaboradores
@@ -45,8 +56,8 @@ namespace ApiRefeicoes.Controllers
 
             if (colaborador == null)
             {
-                _logger.LogWarning("AzureId {AzureId} foi detetado mas não corresponde a nenhum colaborador no banco.", azureIdDetectado);
-                return NotFound(new { message = "Colaborador não encontrado ou não registado no sistema." });
+                _logger.LogWarning("AzureId {AzureId} foi detectado mas não corresponde a nenhum colaborador no banco.", azureIdDetectado);
+                return NotFound(new { Sucesso = false, Mensagem = "Colaborador não cadastrado." });
             }
 
             try
@@ -55,18 +66,31 @@ namespace ApiRefeicoes.Controllers
                 {
                     ColaboradorId = colaborador.Id,
                     HorarioRegistro = DateTime.Now,
-                    ValorRefeicao = 15.0m // Valor de exemplo
+                    ValorRefeicao = 15.0m // Pode ajustar este valor conforme necessário
                 };
                 _context.RegistrosRefeicoes.Add(novoRegistro);
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation("Refeição registada com sucesso para o colaborador: {Nome}", colaborador.Nome);
-                return Ok(new { message = "Refeição registada com sucesso!", colaboradorNome = colaborador.Nome });
+                _logger.LogInformation("Refeição registrada com sucesso para o colaborador: {Nome}", colaborador.Nome);
+
+                string fotoBase64 = null;
+                if (colaborador.Foto != null && colaborador.Foto.Length > 0)
+                {
+                    fotoBase64 = Convert.ToBase64String(colaborador.Foto);
+                }
+
+                return Ok(new
+                {
+                    Sucesso = true,
+                    Mensagem = "Bem-vindo(a)!",
+                    Nome = colaborador.Nome,
+                    FotoBase64 = fotoBase64
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erro ao guardar o registo da refeição para o colaborador {Nome}", colaborador.Nome);
-                return StatusCode(500, new { message = "Ocorreu um erro interno ao registar a refeição." });
+                _logger.LogError(ex, "Erro ao guardar o registro da refeição para o colaborador {Nome}", colaborador.Nome);
+                return StatusCode(500, new { Sucesso = false, Mensagem = "Ocorreu um erro interno ao registrar a refeição." });
             }
         }
     }
