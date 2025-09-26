@@ -1,97 +1,110 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using ApiRefeicoes.Data;
-using ApiRefeicoes.Models;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using ApiRefeicoes.Services;
+using System.IO;
+using ApiRefeicoes.Data;
+using Microsoft.EntityFrameworkCore;
+using System;
 using Microsoft.AspNetCore.Authorization;
+using ApiRefeicoes.Models;
 
 namespace ApiRefeicoes.Controllers
 {
-    [Authorize] // Protege todo o controlador, exigindo um token válido
-    [Route("api/[controller]")]
+    [Authorize]
     [ApiController]
+    [Route("api/[controller]")]
     public class IdentificacaoController : ControllerBase
     {
-        private readonly ApiRefeicoesDbContext _context;
         private readonly FaceApiService _faceApiService;
+        private readonly ApiRefeicoesDbContext _context;
         private readonly ILogger<IdentificacaoController> _logger;
 
-        public IdentificacaoController(ApiRefeicoesDbContext context, FaceApiService faceApiService, ILogger<IdentificacaoController> logger)
+        public IdentificacaoController(FaceApiService faceApiService, ApiRefeicoesDbContext context, ILogger<IdentificacaoController> logger)
         {
-            _context = context;
             _faceApiService = faceApiService;
+            _context = context;
             _logger = logger;
         }
 
-        [HttpPost("identificar")]
-        public async Task<IActionResult> IdentificarColaborador(IFormFile fotoFile)
+        /// <summary>
+        /// Recebe uma foto do aplicativo, compara-a com todas as fotos de colaboradores no banco de dados
+        /// e, se encontrar uma correspondência, regista a refeição.
+        /// </summary>
+        [HttpPost("registrar-ponto")]
+        public async Task<IActionResult> RegistrarPonto([FromForm] IFormFile file)
         {
-            if (fotoFile == null || fotoFile.Length == 0)
+            if (file == null || file.Length == 0)
             {
-                return BadRequest(new { Sucesso = false, Mensagem = "Nenhuma foto foi enviada." });
+                return BadRequest(new { Sucesso = false, Mensagem = "Nenhuma imagem foi enviada." });
             }
 
-            using var memoryStream = new MemoryStream();
-            await fotoFile.CopyToAsync(memoryStream);
-            var imageBytes = memoryStream.ToArray();
+            _logger.LogInformation("Recebida requisição para registrar ponto. A processar a imagem do aplicativo...");
 
-            var azureIdDetectado = await _faceApiService.DetectFaceAndGetId(imageBytes);
+            using var memoryStreamApp = new MemoryStream();
+            await file.CopyToAsync(memoryStreamApp);
+            var imageBytesApp = memoryStreamApp.ToArray();
 
-            // ==================================================================
-            // INÍCIO DA LINHA DE LOG PARA DEPURAÇÃO
-            // ==================================================================
-            _logger.LogInformation("Azure ID detectado pela API de Face: {AzureId}", string.IsNullOrEmpty(azureIdDetectado) ? "NENHUM" : azureIdDetectado);
-            // ==================================================================
-            // FIM DA LINHA DE LOG
-            // ==================================================================
-
-            if (string.IsNullOrEmpty(azureIdDetectado))
+            var faceIdApp = await _faceApiService.DetectFace(imageBytesApp);
+            if (faceIdApp == null)
             {
-                _logger.LogWarning("Nenhum rosto foi detectado na imagem enviada.");
-                return NotFound(new { Sucesso = false, Mensagem = "Rosto não reconhecido." });
+                return Ok(new { Sucesso = false, Mensagem = "Não foi possível detetar um rosto na imagem enviada." });
             }
 
-            var colaborador = await _context.Colaboradores
-                                            .FirstOrDefaultAsync(c => c.AzureId == azureIdDetectado);
+            // ==================================================================
+            // INÍCIO DA CORREÇÃO
+            // ==================================================================
+            // A condição foi alterada de c.Foto.Any() para c.Foto.Length > 0,
+            // que é a forma correta de verificar um campo de imagem (byte[]) e
+            // pode ser traduzida para SQL pelo Entity Framework.
+            var colaboradoresComFoto = await _context.Colaboradores
+                                                     .Where(c => c.Foto != null && c.Foto.Length > 0)
+                                                     .ToListAsync();
+            // ==================================================================
+            // FIM DA CORREÇÃO
+            // ==================================================================
 
-            if (colaborador == null)
-            {
-                _logger.LogWarning("AzureId {AzureId} foi detectado mas não corresponde a nenhum colaborador no banco.", azureIdDetectado);
-                return NotFound(new { Sucesso = false, Mensagem = "Colaborador não cadastrado." });
-            }
+            _logger.LogInformation("A iniciar comparação da face do app com {Count} colaboradores cadastrados.", colaboradoresComFoto.Count);
 
-            try
+            foreach (var colaborador in colaboradoresComFoto)
             {
-                var novoRegistro = new RegistroRefeicao
+                _logger.LogInformation("A verificar colaborador: {Nome} (ID: {Id})", colaborador.Nome, colaborador.Id);
+
+                var faceIdCadastro = await _faceApiService.DetectFace(colaborador.Foto);
+                if (faceIdCadastro == null)
                 {
-                    ColaboradorId = colaborador.Id,
-                    HorarioRegistro = DateTime.Now,
-                    ValorRefeicao = 15.0m // Pode ajustar este valor conforme necessário
-                };
-                _context.RegistrosRefeicoes.Add(novoRegistro);
-                await _context.SaveChangesAsync();
-
-                _logger.LogInformation("Refeição registrada com sucesso para o colaborador: {Nome}", colaborador.Nome);
-
-                string fotoBase64 = null;
-                if (colaborador.Foto != null && colaborador.Foto.Length > 0)
-                {
-                    fotoBase64 = Convert.ToBase64String(colaborador.Foto);
+                    _logger.LogWarning("Não foi possível detetar um rosto na foto de cadastro do colaborador ID {ColaboradorId}. A pular...", colaborador.Id);
+                    continue;
                 }
 
-                return Ok(new
+                var (isIdentical, confidence) = await _faceApiService.VerifyFaces(faceIdApp.Value, faceIdCadastro.Value);
+
+                if (isIdentical && confidence > 0.5)
                 {
-                    Sucesso = true,
-                    Mensagem = "Bem-vindo(a)!",
-                    Nome = colaborador.Nome,
-                    FotoBase64 = fotoBase64
-                });
+                    _logger.LogInformation("SUCESSO: Colaborador {Nome} identificado com confiança de {Confidence}.", colaborador.Nome, confidence);
+
+                    var registroRefeicao = new RegistroRefeicao
+                    {
+                        ColaboradorId = colaborador.Id,
+                        HorarioRegistro = DateTime.Now
+                    };
+
+                    _context.RegistroRefeicoes.Add(registroRefeicao);
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation("Refeição registrada com sucesso para o colaborador {Nome}.", colaborador.Nome);
+
+                    return Ok(new
+                    {
+                        Sucesso = true,
+                        Nome = colaborador.Nome,
+                        FotoBase64 = colaborador.FotoBase64,
+                        Mensagem = "Bem-vindo(a)!"
+                    });
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao guardar o registro da refeição para o colaborador {Nome}", colaborador.Nome);
-                return StatusCode(500, new { Sucesso = false, Mensagem = "Ocorreu um erro interno ao registrar a refeição." });
-            }
+
+            _logger.LogWarning("Falha na identificação: Nenhum colaborador correspondente foi encontrado após comparar todos os registos.");
+            return Ok(new { Sucesso = false, Mensagem = "Rosto não reconhecido." });
         }
     }
 }

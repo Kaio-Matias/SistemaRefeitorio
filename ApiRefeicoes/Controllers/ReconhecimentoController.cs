@@ -1,10 +1,5 @@
-﻿using ApiRefeicoes.Data;
-using ApiRefeicoes.Services;
+﻿using ApiRefeicoes.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System;
-using System.IO;
-using System.Threading.Tasks;
 
 namespace ApiRefeicoes.Controllers
 {
@@ -13,12 +8,10 @@ namespace ApiRefeicoes.Controllers
     public class ReconhecimentoController : ControllerBase
     {
         private readonly FaceApiService _faceApiService;
-        private readonly ApiRefeicoesDbContext _context;
 
-        public ReconhecimentoController(FaceApiService faceApiService, ApiRefeicoesDbContext context)
+        public ReconhecimentoController(FaceApiService faceApiService)
         {
             _faceApiService = faceApiService;
-            _context = context;
         }
 
         [HttpPost("verify")]
@@ -37,22 +30,15 @@ namespace ApiRefeicoes.Controllers
             await file2.CopyToAsync(memoryStream2);
             var imageBytes2 = memoryStream2.ToArray();
 
-            var faceId1Str = await _faceApiService.DetectFaceAndGetId(imageBytes1);
-            var faceId2Str = await _faceApiService.DetectFaceAndGetId(imageBytes2);
+            var faceId1 = await _faceApiService.DetectFace(imageBytes1);
+            var faceId2 = await _faceApiService.DetectFace(imageBytes2);
 
-            if (string.IsNullOrEmpty(faceId1Str) || string.IsNullOrEmpty(faceId2Str))
+            if (faceId1 == null || faceId2 == null)
             {
                 return BadRequest("Não foi possível detectar faces em uma ou ambas as imagens.");
             }
 
-          
-            if (!Guid.TryParse(faceId1Str, out Guid faceId1Guid) || !Guid.TryParse(faceId2Str, out Guid faceId2Guid))
-            {
-                return BadRequest("Os IDs de face retornados não são válidos.");
-            }
-
-            var (isIdentical, confidence) = await _faceApiService.VerifyFaces(faceId1Guid, faceId2Guid);
-
+            var (isIdentical, confidence) = await _faceApiService.VerifyFaces(faceId1.Value, faceId2.Value);
 
             return Ok(new { isIdentical, confidence });
         }

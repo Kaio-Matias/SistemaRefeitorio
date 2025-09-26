@@ -9,6 +9,7 @@ namespace ApiRefeicoes.Services
         private readonly string _apiKey;
         private readonly string _endpoint;
         private readonly string _personGroupId;
+        private readonly string _recognitionModel;
         private readonly ILogger<FaceApiService> _logger;
 
         public FaceApiService(IConfiguration configuration, ILogger<FaceApiService> logger)
@@ -16,6 +17,7 @@ namespace ApiRefeicoes.Services
             _apiKey = configuration["AzureFaceApi:ApiKey"];
             _endpoint = configuration["AzureFaceApi:Endpoint"];
             _personGroupId = configuration["AzureFaceApi:PersonGroupId"];
+            _recognitionModel = configuration["AzureFaceApi:RecognitionModel"];
             _logger = logger;
         }
 
@@ -24,67 +26,46 @@ namespace ApiRefeicoes.Services
             return new FaceClient(new ApiKeyServiceClientCredentials(_apiKey)) { Endpoint = _endpoint };
         }
 
-        public async Task<string> DetectFaceAndGetId(byte[] imageBytes)
+        /// <summary>
+        /// Deteta uma face numa imagem e retorna o seu faceId temporário.
+        /// Este método é a base para a nossa lógica de verificação manual.
+        /// </summary>
+        public async Task<Guid?> DetectFace(byte[] imageBytes)
         {
             var client = GetClient();
             using var stream = new MemoryStream(imageBytes);
 
             try
             {
-                // Passo 1: Tentar DETECTAR um rosto na imagem
-                var detectedFaces = await client.Face.DetectWithStreamAsync(stream, recognitionModel: RecognitionModel.Recognition04, detectionModel: DetectionModel.Detection03);
+                var detectedFaces = await client.Face.DetectWithStreamAsync(stream, recognitionModel: _recognitionModel, detectionModel: DetectionModel.Detection03);
 
-                if (detectedFaces.Count == 0)
+                if (detectedFaces.Any())
                 {
-                    _logger.LogWarning("PASSO 1 FALHOU: Nenhuma face foi detectada na imagem pelo Azure.");
-                    return null;
+                    var firstFace = detectedFaces.First();
+                    _logger.LogInformation("Face detetada com sucesso. FaceId temporário: {FaceId}", firstFace.FaceId);
+                    return firstFace.FaceId;
                 }
 
-                _logger.LogInformation("PASSO 1 SUCESSO: {Count} face(s) detectada(s). FaceId temporário: {FaceId}", detectedFaces.Count, detectedFaces.First().FaceId);
-
-                var faceIds = detectedFaces.Select(f => f.FaceId.Value).ToList();
-
-                // Passo 2: Tentar IDENTIFICAR o rosto detectado no nosso grupo de pessoas
-                var identifyResults = await client.Face.IdentifyAsync(faceIds, _personGroupId);
-
-                if (identifyResults == null || !identifyResults.Any())
-                {
-                    _logger.LogWarning("PASSO 2 FALHOU: A API de Identificação não retornou resultados.");
-                    return null;
-                }
-
-                foreach (var result in identifyResults)
-                {
-                    if (result.Candidates.Count > 0)
-                    {
-                        var candidate = result.Candidates.OrderByDescending(c => c.Confidence).First();
-                        var personId = candidate.PersonId;
-                        _logger.LogInformation("PASSO 2 SUCESSO: Face identificada como PersonId (AzureId): {PersonId} com confiança de {Confidence}", personId, candidate.Confidence);
-                        return personId.ToString();
-                    }
-                }
-
-                _logger.LogWarning("PASSO 2 FALHOU: Uma face foi detectada, mas não corresponde a nenhum colaborador cadastrado no Azure (nenhum candidato encontrado).");
+                _logger.LogWarning("Nenhuma face foi detetada na imagem fornecida.");
                 return null;
             }
             catch (APIErrorException apiEx)
             {
-                _logger.LogError(apiEx, "ERRO NA API DO AZURE: Status Code: {StatusCode}, Mensagem: {Message}", apiEx.Response.StatusCode, apiEx.Body?.Error?.Message);
-                return null;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro inesperado no FaceApiService ao tentar detectar e identificar.");
+                _logger.LogError(apiEx, "ERRO NA API DO AZURE (Detecção): Status Code: {StatusCode}, Mensagem: {Message}", apiEx.Response.StatusCode, apiEx.Body?.Error?.Message);
                 return null;
             }
         }
 
+        /// <summary>
+        /// Compara dois faceIds temporários para verificar se pertencem à mesma pessoa.
+        /// </summary>
         public async Task<(bool isIdentical, double confidence)> VerifyFaces(Guid faceId1, Guid faceId2)
         {
             var client = GetClient();
             try
             {
                 var result = await client.Face.VerifyFaceToFaceAsync(faceId1, faceId2);
+                _logger.LogInformation("Resultado da verificação - IsIdentical: {IsIdentical}, Confidence: {Confidence}", result.IsIdentical, result.Confidence);
                 return (result.IsIdentical, result.Confidence);
             }
             catch (Exception ex)
@@ -94,58 +75,43 @@ namespace ApiRefeicoes.Services
             }
         }
 
-        public async Task<Guid?> CreatePerson(string name)
+        // Os métodos de gestão de Person Group continuam a ser úteis para o processo de cadastro de colaboradores no portal.
+        public async Task EnsurePersonGroupExistsAsync()
         {
             var client = GetClient();
-            try
+            try { await client.PersonGroup.GetAsync(_personGroupId); }
+            catch (APIErrorException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
             {
-                var person = await client.PersonGroupPerson.CreateAsync(_personGroupId, name);
-                return person.PersonId;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao criar pessoa no grupo.");
-                return null;
+                await client.PersonGroup.CreateAsync(_personGroupId, _personGroupId, recognitionModel: _recognitionModel);
             }
         }
 
-        public async Task<PersistedFace> AddFaceToPerson(Guid personId, byte[] imageBytes)
+        public async Task<Guid?> CreatePersonAsync(string name)
         {
+            await EnsurePersonGroupExistsAsync();
+            var client = GetClient();
+            var person = await client.PersonGroupPerson.CreateAsync(_personGroupId, name);
+            return person.PersonId;
+        }
+
+        public async Task<PersistedFace> AddFaceToPersonAsync(Guid personId, byte[] imageBytes)
+        {
+            await EnsurePersonGroupExistsAsync();
             var client = GetClient();
             using var stream = new MemoryStream(imageBytes);
-            try
-            {
-                var persistedFace = await client.PersonGroupPerson.AddFaceFromStreamAsync(_personGroupId, personId, stream, detectionModel: DetectionModel.Detection03);
-                return persistedFace;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao adicionar face à pessoa.");
-                return null;
-            }
+            return await client.PersonGroupPerson.AddFaceFromStreamAsync(_personGroupId, personId, stream, detectionModel: DetectionModel.Detection03);
         }
 
-        public async Task TrainPersonGroup()
+        public async Task TrainPersonGroupAsync()
         {
+            await EnsurePersonGroupExistsAsync();
             var client = GetClient();
-            try
+            await client.PersonGroup.TrainAsync(_personGroupId);
+            while (true)
             {
-                await client.PersonGroup.TrainAsync(_personGroupId);
-
-                while (true)
-                {
-                    var status = await client.PersonGroup.GetTrainingStatusAsync(_personGroupId);
-                    if (status.Status == TrainingStatusType.Succeeded || status.Status == TrainingStatusType.Failed)
-                    {
-                        _logger.LogInformation("Treinamento do grupo de pessoas concluído com status: {Status}", status.Status);
-                        break;
-                    }
-                    await Task.Delay(1000);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao treinar o grupo de pessoas.");
+                await Task.Delay(1000);
+                var status = await client.PersonGroup.GetTrainingStatusAsync(_personGroupId);
+                if (status.Status is TrainingStatusType.Succeeded or TrainingStatusType.Failed) break;
             }
         }
     }

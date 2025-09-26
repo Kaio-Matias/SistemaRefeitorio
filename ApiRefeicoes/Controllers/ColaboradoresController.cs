@@ -24,9 +24,9 @@ namespace ApiRefeicoes.Controllers
         public async Task<ActionResult<IEnumerable<Colaborador>>> GetColaboradores()
         {
             return await _context.Colaboradores
-                                 .Include(c => c.Departamento)
-                                 .Include(c => c.Funcao)
-                                 .ToListAsync();
+                                  .Include(c => c.Departamento)
+                                  .Include(c => c.Funcao)
+                                  .ToListAsync();
         }
 
         // GET: api/Colaboradores/5
@@ -50,12 +50,24 @@ namespace ApiRefeicoes.Controllers
         [HttpPost]
         public async Task<ActionResult<Colaborador>> PostColaborador([FromForm] ColaboradorDto colaboradorDto)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var personId = await _faceApiService.CreatePersonAsync(colaboradorDto.Nome);
+            if (personId == null)
+            {
+                return BadRequest("Não foi possível criar a identidade do colaborador no serviço de reconhecimento facial.");
+            }
+
             var colaborador = new Colaborador
             {
                 Nome = colaboradorDto.Nome,
                 CartaoPonto = colaboradorDto.CartaoPonto,
                 DepartamentoId = colaboradorDto.DepartamentoId,
                 FuncaoId = colaboradorDto.FuncaoId,
+                AzurePersonId = personId.Value
             };
 
             if (colaboradorDto.FotoFile != null && colaboradorDto.FotoFile.Length > 0)
@@ -65,16 +77,27 @@ namespace ApiRefeicoes.Controllers
                 var imageBytes = memoryStream.ToArray();
 
                 colaborador.Foto = imageBytes;
-                colaborador.AzureId = await _faceApiService.DetectFaceAndGetId(imageBytes);
+
+                var persistedFace = await _faceApiService.AddFaceToPersonAsync(personId.Value, imageBytes);
+                if (persistedFace == null)
+                {
+                    return BadRequest("Uma face válida não foi detectada na imagem. O colaborador não foi criado.");
+                }
+            }
+            else
+            {
+                return BadRequest("É obrigatório o envio de uma foto para o cadastro.");
             }
 
             _context.Colaboradores.Add(colaborador);
             await _context.SaveChangesAsync();
 
+            await _faceApiService.TrainPersonGroupAsync();
+
             return CreatedAtAction("GetColaborador", new { id = colaborador.Id }, colaborador);
         }
 
-        // PUT: api/Colaboradores/5  <-- MOVIDO PARA DENTRO DA CLASSE
+        // PUT: api/Colaboradores/5
         [HttpPut("{id}")]
         public async Task<IActionResult> PutColaborador(int id, [FromBody] ColaboradorUpdateDto colaboradorDto)
         {
@@ -85,7 +108,6 @@ namespace ApiRefeicoes.Controllers
                 return NotFound();
             }
 
-            // Atualiza apenas os campos que foram preenchidos no formulário
             colaborador.Nome = colaboradorDto.Nome;
             colaborador.CartaoPonto = colaboradorDto.CartaoPonto;
             colaborador.DepartamentoId = colaboradorDto.DepartamentoId;
@@ -109,9 +131,8 @@ namespace ApiRefeicoes.Controllers
                 }
             }
 
-            return NoContent(); // Retorna sucesso sem conteúdo
+            return NoContent();
         }
-
 
         // PUT: api/Colaboradores/5/foto
         [HttpPut("{id}/foto")]
@@ -123,6 +144,11 @@ namespace ApiRefeicoes.Controllers
                 return NotFound("Colaborador não encontrado.");
             }
 
+            if (colaborador.AzurePersonId == null)
+            {
+                return BadRequest("Este colaborador não possui uma identidade de reconhecimento facial. Crie um novo registo para ele.");
+            }
+
             if (fotoFile == null || fotoFile.Length == 0)
             {
                 return BadRequest("Nenhuma foto foi enviada.");
@@ -132,33 +158,21 @@ namespace ApiRefeicoes.Controllers
             await fotoFile.CopyToAsync(memoryStream);
             var imageBytes = memoryStream.ToArray();
 
-            var novoAzureId = await _faceApiService.DetectFaceAndGetId(imageBytes);
+            var persistedFace = await _faceApiService.AddFaceToPersonAsync(colaborador.AzurePersonId.Value, imageBytes);
 
-            if (novoAzureId == null)
+            if (persistedFace == null)
             {
-                return BadRequest("Não foi possível detectar um rosto na imagem enviada.");
-            }
-
-            string? aviso = null;
-            if (!string.IsNullOrEmpty(colaborador.AzureId) && colaborador.AzureId != novoAzureId)
-            {
-                aviso = "Aviso: A nova foto parece ser de uma pessoa diferente da anterior.";
+                return BadRequest("Não foi possível detectar um rosto na imagem enviada. A foto não foi atualizada.");
             }
 
             colaborador.Foto = imageBytes;
-            colaborador.AzureId = novoAzureId;
-
             _context.Entry(colaborador).State = EntityState.Modified;
             await _context.SaveChangesAsync();
 
-            if (aviso != null)
-            {
-                return Ok(new { message = "Foto do colaborador atualizada com sucesso.", warning = aviso });
-            }
+            await _faceApiService.TrainPersonGroupAsync();
 
             return Ok(new { message = "Foto do colaborador atualizada com sucesso." });
         }
-
 
         // DELETE: api/Colaboradores/5
         [HttpDelete("{id}")]
@@ -173,6 +187,8 @@ namespace ApiRefeicoes.Controllers
             _context.Colaboradores.Remove(colaborador);
             await _context.SaveChangesAsync();
 
+            await _faceApiService.TrainPersonGroupAsync();
+
             return NoContent();
         }
 
@@ -182,7 +198,6 @@ namespace ApiRefeicoes.Controllers
         }
     }
 
-    // DTO para a criação (POST)
     public class ColaboradorDto
     {
         public string Nome { get; set; }
@@ -192,7 +207,6 @@ namespace ApiRefeicoes.Controllers
         public IFormFile? FotoFile { get; set; }
     }
 
-    // DTO para a atualização (PUT)
     public class ColaboradorUpdateDto
     {
         public string Nome { get; set; }
