@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using System;
 using Microsoft.AspNetCore.Authorization;
 using ApiRefeicoes.Models;
+using System.Linq; // Adicione este using para o .Where() em memória
 
 namespace ApiRefeicoes.Controllers
 {
@@ -27,10 +28,6 @@ namespace ApiRefeicoes.Controllers
             _logger = logger;
         }
 
-        /// <summary>
-        /// Recebe uma foto do aplicativo, compara-a com todas as fotos de colaboradores no banco de dados
-        /// e, se encontrar uma correspondência, regista a refeição.
-        /// </summary>
         [HttpPost("registrar-ponto")]
         public async Task<IActionResult> RegistrarPonto([FromForm] IFormFile file)
         {
@@ -39,7 +36,7 @@ namespace ApiRefeicoes.Controllers
                 return BadRequest(new { Sucesso = false, Mensagem = "Nenhuma imagem foi enviada." });
             }
 
-            _logger.LogInformation("Recebida requisição para registrar ponto. A processar a imagem do aplicativo...");
+            _logger.LogInformation("Requisição para registar ponto recebida.");
 
             using var memoryStreamApp = new MemoryStream();
             await file.CopyToAsync(memoryStreamApp);
@@ -52,58 +49,55 @@ namespace ApiRefeicoes.Controllers
             }
 
             // ==================================================================
-            // INÍCIO DA CORREÇÃO
-            // ==================================================================
-            // A condição foi alterada de c.Foto.Any() para c.Foto.Length > 0,
-            // que é a forma correta de verificar um campo de imagem (byte[]) e
-            // pode ser traduzida para SQL pelo Entity Framework.
-            var colaboradoresComFoto = await _context.Colaboradores
-                                                     .Where(c => c.Foto != null && c.Foto.Length > 0)
-                                                     .ToListAsync();
-            // ==================================================================
-            // FIM DA CORREÇÃO
+            // SOLUÇÃO DEFINITIVA: AVALIAÇÃO NO LADO DO CLIENTE
+            // 1. Primeiro, trazemos todos os colaboradores para a memória.
+            var todosOsColaboradores = await _context.Colaboradores.ToListAsync();
+
+            // 2. DEPOIS, filtramos a lista na memória da aplicação.
+            //    Isto evita o erro de tradução do LINQ para SQL.
+            var colaboradoresComFoto = todosOsColaboradores
+                                           .Where(c => c.Foto != null && c.Foto.Length > 0)
+                                           .ToList();
             // ==================================================================
 
-            _logger.LogInformation("A iniciar comparação da face do app com {Count} colaboradores cadastrados.", colaboradoresComFoto.Count);
+            _logger.LogInformation("A comparar com {Count} colaboradores com foto.", colaboradoresComFoto.Count);
 
             foreach (var colaborador in colaboradoresComFoto)
             {
-                _logger.LogInformation("A verificar colaborador: {Nome} (ID: {Id})", colaborador.Nome, colaborador.Id);
-
                 var faceIdCadastro = await _faceApiService.DetectFace(colaborador.Foto);
                 if (faceIdCadastro == null)
                 {
-                    _logger.LogWarning("Não foi possível detetar um rosto na foto de cadastro do colaborador ID {ColaboradorId}. A pular...", colaborador.Id);
+                    _logger.LogWarning("A foto do colaborador {Nome} não tem um rosto detetável.", colaborador.Nome);
                     continue;
                 }
 
                 var (isIdentical, confidence) = await _faceApiService.VerifyFaces(faceIdApp.Value, faceIdCadastro.Value);
+                _logger.LogInformation("A verificar {Nome}: Idêntico={isIdentical}, Confiança={confidence}", colaborador.Nome, isIdentical, confidence);
 
-                if (isIdentical && confidence > 0.5)
+                if (isIdentical && confidence > 0.6)
                 {
-                    _logger.LogInformation("SUCESSO: Colaborador {Nome} identificado com confiança de {Confidence}.", colaborador.Nome, confidence);
-
+                    _logger.LogInformation("SUCESSO: Colaborador {Nome} identificado.", colaborador.Nome);
                     var registroRefeicao = new RegistroRefeicao
                     {
                         ColaboradorId = colaborador.Id,
-                        HorarioRegistro = DateTime.Now
+                        HorarioRegistro = DateTime.Now,
+                        ValorRefeicao = 17,
+                        Dispositivo = "Aplicação Móvel"
                     };
-
                     _context.RegistroRefeicoes.Add(registroRefeicao);
                     await _context.SaveChangesAsync();
-                    _logger.LogInformation("Refeição registrada com sucesso para o colaborador {Nome}.", colaborador.Nome);
 
                     return Ok(new
                     {
                         Sucesso = true,
                         Nome = colaborador.Nome,
-                        FotoBase64 = colaborador.FotoBase64,
+                        FotoBase64 = Convert.ToBase64String(colaborador.Foto),
                         Mensagem = "Bem-vindo(a)!"
                     });
                 }
             }
 
-            _logger.LogWarning("Falha na identificação: Nenhum colaborador correspondente foi encontrado após comparar todos os registos.");
+            _logger.LogWarning("Falha na identificação: Nenhum colaborador correspondente foi encontrado.");
             return Ok(new { Sucesso = false, Mensagem = "Rosto não reconhecido." });
         }
     }

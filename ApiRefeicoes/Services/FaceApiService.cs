@@ -26,46 +26,35 @@ namespace ApiRefeicoes.Services
             return new FaceClient(new ApiKeyServiceClientCredentials(_apiKey)) { Endpoint = _endpoint };
         }
 
-        /// <summary>
-        /// Deteta uma face numa imagem e retorna o seu faceId temporário.
-        /// Este método é a base para a nossa lógica de verificação manual.
-        /// </summary>
         public async Task<Guid?> DetectFace(byte[] imageBytes)
         {
             var client = GetClient();
             using var stream = new MemoryStream(imageBytes);
-
             try
             {
                 var detectedFaces = await client.Face.DetectWithStreamAsync(stream, recognitionModel: _recognitionModel, detectionModel: DetectionModel.Detection03);
-
                 if (detectedFaces.Any())
                 {
                     var firstFace = detectedFaces.First();
-                    _logger.LogInformation("Face detetada com sucesso. FaceId temporário: {FaceId}", firstFace.FaceId);
+                    _logger.LogInformation("Face detetada com sucesso. FaceId: {FaceId}", firstFace.FaceId);
                     return firstFace.FaceId;
                 }
-
-                _logger.LogWarning("Nenhuma face foi detetada na imagem fornecida.");
+                _logger.LogWarning("Nenhuma face detetada na imagem.");
                 return null;
             }
             catch (APIErrorException apiEx)
             {
-                _logger.LogError(apiEx, "ERRO NA API DO AZURE (Detecção): Status Code: {StatusCode}, Mensagem: {Message}", apiEx.Response.StatusCode, apiEx.Body?.Error?.Message);
+                _logger.LogError(apiEx, "Erro na API do Azure (Detetar): {Message}", apiEx.Body?.Error?.Message);
                 return null;
             }
         }
 
-        /// <summary>
-        /// Compara dois faceIds temporários para verificar se pertencem à mesma pessoa.
-        /// </summary>
         public async Task<(bool isIdentical, double confidence)> VerifyFaces(Guid faceId1, Guid faceId2)
         {
             var client = GetClient();
             try
             {
                 var result = await client.Face.VerifyFaceToFaceAsync(faceId1, faceId2);
-                _logger.LogInformation("Resultado da verificação - IsIdentical: {IsIdentical}, Confidence: {Confidence}", result.IsIdentical, result.Confidence);
                 return (result.IsIdentical, result.Confidence);
             }
             catch (Exception ex)
@@ -75,13 +64,37 @@ namespace ApiRefeicoes.Services
             }
         }
 
-        // Os métodos de gestão de Person Group continuam a ser úteis para o processo de cadastro de colaboradores no portal.
+        public async Task<Guid?> IdentifyFaceAsync(Guid faceId)
+        {
+            var client = GetClient();
+            try
+            {
+                var identifyResults = await client.Face.IdentifyAsync(new List<Guid> { faceId }, _personGroupId);
+                var result = identifyResults.FirstOrDefault()?.Candidates.FirstOrDefault();
+                if (result != null && result.Confidence > 0.5) // Limiar de confiança
+                {
+                    _logger.LogInformation("Pessoa identificada: {PersonId} com confiança {Confidence}", result.PersonId, result.Confidence);
+                    return result.PersonId;
+                }
+                return null;
+            }
+            catch (APIErrorException apiEx)
+            {
+                _logger.LogError(apiEx, "Erro na API do Azure (Identificar): {Message}", apiEx.Body?.Error?.Message);
+                return null;
+            }
+        }
+
         public async Task EnsurePersonGroupExistsAsync()
         {
             var client = GetClient();
-            try { await client.PersonGroup.GetAsync(_personGroupId); }
+            try
+            {
+                await client.PersonGroup.GetAsync(_personGroupId);
+            }
             catch (APIErrorException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
             {
+                _logger.LogWarning("Grupo de Pessoas '{PersonGroupId}' não encontrado. A criar um novo.", _personGroupId);
                 await client.PersonGroup.CreateAsync(_personGroupId, _personGroupId, recognitionModel: _recognitionModel);
             }
         }
@@ -106,13 +119,38 @@ namespace ApiRefeicoes.Services
         {
             await EnsurePersonGroupExistsAsync();
             var client = GetClient();
+            _logger.LogInformation("A iniciar treino para o grupo: {PersonGroupId}", _personGroupId);
             await client.PersonGroup.TrainAsync(_personGroupId);
-            while (true)
+        }
+
+        // --- MÉTODOS ADICIONADOS PARA CORRIGIR O AZUREDEBUGCONTROLLER ---
+
+        public async Task<TrainingStatus> GetTrainingStatusAsync()
+        {
+            await EnsurePersonGroupExistsAsync();
+            var client = GetClient();
+            return await client.PersonGroup.GetTrainingStatusAsync(_personGroupId);
+        }
+
+        public async Task DeletePersonGroupAsync()
+        {
+            var client = GetClient();
+            try
             {
-                await Task.Delay(1000);
-                var status = await client.PersonGroup.GetTrainingStatusAsync(_personGroupId);
-                if (status.Status is TrainingStatusType.Succeeded or TrainingStatusType.Failed) break;
+                await client.PersonGroup.DeleteAsync(_personGroupId);
+                _logger.LogInformation("Grupo de Pessoas '{PersonGroupId}' apagado com sucesso.", _personGroupId);
             }
+            catch (APIErrorException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+            {
+                _logger.LogWarning("Tentativa de apagar o Grupo de Pessoas '{PersonGroupId}', mas ele não foi encontrado.", _personGroupId);
+            }
+        }
+
+        // Wrapper para manter a compatibilidade com o controller de debug
+        public async Task<string> DetectFaceAndGetId(byte[] imageBytes, bool bypassIdentify = false)
+        {
+            Guid? faceId = await DetectFace(imageBytes);
+            return faceId?.ToString();
         }
     }
 }
