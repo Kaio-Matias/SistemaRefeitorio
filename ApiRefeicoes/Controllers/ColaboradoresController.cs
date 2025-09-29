@@ -41,7 +41,31 @@ namespace ApiRefeicoes.Controllers
             }
             return Ok(colaborador);
         }
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutColaborador(int id, [FromForm] UpdateColaboradorDto colaboradorDto, IFormFile? imagem)
+        {
+            _logger.LogInformation("Recebida requisição para ATUALIZAR colaborador ID: {Id}", id);
+            try
+            {
+                // Usa um stream nulo se nenhuma imagem for enviada
+                var stream = imagem?.OpenReadStream();
+                var colaboradorAtualizado = await _colaboradorService.UpdateColaboradorAsync(id, colaboradorDto, stream);
 
+                if (colaboradorAtualizado == null)
+                {
+                    _logger.LogWarning("Colaborador com ID {Id} não encontrado para atualização.", id);
+                    return NotFound($"Colaborador com ID {id} não encontrado.");
+                }
+
+                _logger.LogInformation("Colaborador ID {Id} atualizado com sucesso.", id);
+                return Ok(colaboradorAtualizado);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro interno ao tentar atualizar o colaborador ID: {Id}", id);
+                return StatusCode(500, $"Erro interno ao atualizar colaborador. Detalhes: {ex.Message}");
+            }
+        }
         [HttpPost]
         public async Task<ActionResult<ColaboradorResponseDto>> PostColaborador([FromForm] CreateColaboradorDto colaboradorDto, IFormFile imagem)
         {

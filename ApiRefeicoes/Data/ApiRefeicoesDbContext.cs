@@ -9,22 +9,34 @@ namespace ApiRefeicoes.Data
         {
         }
 
-        public DbSet<Usuario> Usuarios { get; set; }
+        public DbSet<Colaborador> Colaboradores { get; set; }
         public DbSet<Departamento> Departamentos { get; set; }
         public DbSet<Funcao> Funcoes { get; set; }
-        public DbSet<Colaborador> Colaboradores { get; set; }
+        public DbSet<Usuario> Usuarios { get; set; }
         public DbSet<Cardapio> Cardapios { get; set; }
         public DbSet<Dispositivo> Dispositivos { get; set; }
+        public DbSet<ParadaDeFabrica> ParadasDeFabrica { get; set; }
         public DbSet<RegistroRefeicao> RegistroRefeicoes { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // ADICIONADO: Define o tipo da coluna para decimal, resolvendo o aviso.
+            // Agora essas configurações funcionarão sem erros
+            modelBuilder.Entity<Colaborador>()
+                .HasOne(c => c.Funcao)
+                .WithMany(f => f.Colaboradores)
+                .HasForeignKey(c => c.FuncaoId);
+
+            modelBuilder.Entity<Colaborador>()
+                .HasOne(c => c.Departamento)
+                .WithMany(d => d.Colaboradores)
+                .HasForeignKey(c => c.DepartamentoId);
+
             modelBuilder.Entity<RegistroRefeicao>()
-                .Property(p => p.ValorRefeicao)
-                .HasColumnType("decimal(18, 2)");
+                .HasOne(r => r.Colaborador)
+                .WithMany(c => c.RegistrosRefeicoes)
+                .HasForeignKey(r => r.ColaboradorId);
         }
     }
 }

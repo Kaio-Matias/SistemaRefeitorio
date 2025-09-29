@@ -12,5 +12,6 @@ namespace ApiRefeicoes.Services
         Task<ColaboradorResponseDto> CreateColaboradorAsync(CreateColaboradorDto colaboradorDto, Stream imagemStream);
         Task<IEnumerable<ColaboradorResponseDto>> GetAllColaboradoresAsync();
         Task<ColaboradorResponseDto?> GetColaboradorByIdAsync(int id);
+        Task<ColaboradorResponseDto?> UpdateColaboradorAsync(int id, UpdateColaboradorDto colaboradorDto, Stream? imagemStream);
     }
 }

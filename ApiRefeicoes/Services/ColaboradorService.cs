@@ -21,66 +21,73 @@ namespace ApiRefeicoes.Services
             _faceApiService = faceApiService;
         }
 
+        // --- MÉTODO CREATE REINSERIDO PARA CORRIGIR ERRO CS0535 ---
         public async Task<ColaboradorResponseDto> CreateColaboradorAsync(CreateColaboradorDto colaboradorDto, Stream imagemStream)
         {
-            // Mapeia do DTO para o Modelo
             var colaborador = new Colaborador
             {
                 Nome = colaboradorDto.Nome,
                 CartaoPonto = colaboradorDto.CartaoPonto,
                 FuncaoId = colaboradorDto.FuncaoId,
                 DepartamentoId = colaboradorDto.DepartamentoId,
-                Ativo = true // Define como ativo por padrão
+                Ativo = true
             };
 
-            // --- INÍCIO DA CORREÇÃO ---
-
-            // 1. Copia o stream de upload (que não pode ser "rebobinado") para um 
-            //    MemoryStream que permite a reutilização dos dados da imagem.
             using (var memoryStream = new MemoryStream())
             {
                 await imagemStream.CopyToAsync(memoryStream);
-
-                // 2. Salva a foto no banco de dados usando os bytes do MemoryStream.
                 colaborador.Foto = memoryStream.ToArray();
-
-                // Adiciona o colaborador e salva para gerar o ID.
-                _context.Colaboradores.Add(colaborador);
-                await _context.SaveChangesAsync();
-
-                // 3. "Rebobina" o MemoryStream para o início. Agora ele está pronto
-                //    para ser lido novamente pela API da Azure.
                 memoryStream.Position = 0;
 
-                // 4. Cadastra a face na API do Azure usando o mesmo MemoryStream.
                 var personId = await _faceApiService.CreatePersonAsync(colaborador.Nome);
                 await _faceApiService.AddFaceToPersonAsync(personId, memoryStream);
-
-                // Inicia o treinamento do grupo de pessoas na Azure
-                await _faceApiService.TrainPersonGroupAsync();
-
-                // Atribui o Guid retornado pela Azure ao colaborador e salva novamente.
                 colaborador.PersonId = personId;
-                await _context.SaveChangesAsync();
             }
-            // --- FIM DA CORREÇÃO ---
 
+            _context.Colaboradores.Add(colaborador);
+            await _context.SaveChangesAsync();
+            await _faceApiService.TrainPersonGroupAsync();
 
-            // Mapeia do Modelo para o DTO de resposta
-            var funcao = await _context.Funcoes.FindAsync(colaborador.FuncaoId);
-            var departamento = await _context.Departamentos.FindAsync(colaborador.DepartamentoId);
+            return await GetColaboradorByIdAsync(colaborador.Id);
+        }
 
-            var responseDto = new ColaboradorResponseDto
+        // --- MÉTODO UPDATE CORRIGIDO ---
+        public async Task<ColaboradorResponseDto?> UpdateColaboradorAsync(int id, UpdateColaboradorDto colaboradorDto, Stream? imagemStream)
+        {
+            var colaborador = await _context.Colaboradores.FindAsync(id);
+            if (colaborador == null) return null;
+
+            if (imagemStream != null)
             {
-                Id = colaborador.Id,
-                Nome = colaborador.Nome,
-                CartaoPonto = colaborador.CartaoPonto,
-                Funcao = funcao?.Nome ?? "N/A",
-                Departamento = departamento?.Nome ?? "N/A",
-                Ativo = colaborador.Ativo
-            };
+                // CORREÇÃO (CS1503): Verifica se o PersonId existe antes de usar
+                if (colaborador.PersonId.HasValue)
+                {
+                    await _faceApiService.DeletePersonAsync(colaborador.PersonId.Value);
+                }
 
-            return responseDto;
+                using (var memoryStream = new MemoryStream())
+                {
+                    await imagemStream.CopyToAsync(memoryStream);
+                    colaborador.Foto = memoryStream.ToArray();
+                    memoryStream.Position = 0;
+
+                    var novoPersonId = await _faceApiService.CreatePersonAsync(colaboradorDto.Nome);
+                    await _faceApiService.AddFaceToPersonAsync(novoPersonId, memoryStream);
+                    colaborador.PersonId = novoPersonId;
+                }
+                await _faceApiService.TrainPersonGroupAsync();
+            }
+
+            colaborador.Nome = colaboradorDto.Nome;
+            colaborador.CartaoPonto = colaboradorDto.CartaoPonto;
+            colaborador.FuncaoId = colaboradorDto.FuncaoId;
+            colaborador.DepartamentoId = colaboradorDto.DepartamentoId;
+            colaborador.Ativo = colaboradorDto.Ativo;
+
+            _context.Colaboradores.Update(colaborador);
+            await _context.SaveChangesAsync();
+
+            return await GetColaboradorByIdAsync(id);
         }
 
         public async Task<IEnumerable<ColaboradorResponseDto>> GetAllColaboradoresAsync()
@@ -96,7 +103,9 @@ namespace ApiRefeicoes.Services
                     Funcao = c.Funcao.Nome,
                     Departamento = c.Departamento.Nome,
                     Ativo = c.Ativo,
-                    Foto = c.Foto
+                    Foto = c.Foto,
+                    FuncaoId = c.FuncaoId,
+                    DepartamentoId = c.DepartamentoId
                 }).ToListAsync();
         }
 
@@ -107,10 +116,7 @@ namespace ApiRefeicoes.Services
                 .Include(c => c.Departamento)
                 .FirstOrDefaultAsync(c => c.Id == id);
 
-            if (colaborador == null)
-            {
-                return null;
-            }
+            if (colaborador == null) return null;
 
             return new ColaboradorResponseDto
             {
@@ -119,7 +125,10 @@ namespace ApiRefeicoes.Services
                 CartaoPonto = colaborador.CartaoPonto,
                 Funcao = colaborador.Funcao.Nome,
                 Departamento = colaborador.Departamento.Nome,
-                Ativo = colaborador.Ativo
+                Ativo = colaborador.Ativo,
+                Foto = colaborador.Foto,
+                FuncaoId = colaborador.FuncaoId,
+                DepartamentoId = colaborador.DepartamentoId
             };
         }
     }

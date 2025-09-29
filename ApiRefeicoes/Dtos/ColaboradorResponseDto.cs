@@ -9,6 +9,11 @@
         public string Departamento { get; set; }
         public bool Ativo { get; set; }
         public byte[]? Foto { get; set; }
-  
+
+        // --- INÍCIO DA CORREÇÃO ---
+        // Adiciona os IDs que estavam faltando, resolvendo os erros CS0117
+        public int FuncaoId { get; set; }
+        public int DepartamentoId { get; set; }
+        // --- FIM DA CORREÇÃO ---
     }
 }

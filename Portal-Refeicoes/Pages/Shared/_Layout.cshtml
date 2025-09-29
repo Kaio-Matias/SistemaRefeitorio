@@ -5,7 +5,7 @@
         // Garante que a comparação ignore a barra inicial para ser mais robusta
         var currentPage = ViewContext.RouteData.Values["Page"]?.ToString()?.TrimStart('/');
         var targetPage = page.TrimStart('/');
-        return currentPage?.StartsWith(targetPage) ?? false ? "active" : "";
+        return currentPage?.StartsWith(targetPage, StringComparison.OrdinalIgnoreCase) ?? false ? "active" : "";
     }
 }
 
@@ -48,7 +48,7 @@
                     <ul class="nav flex-column">
                         <li class="nav-item">
                             <a class="nav-link @IsPageActive("/Index")" aria-current="page" asp-page="/Index">
-                                <i class="bi bi-house-door"></i>
+                                <i class="bi bi-house-door me-2"></i>
                                 Dashboard
                             </a>
                         </li>
@@ -57,27 +57,34 @@
                         </h6>
                         <li class="nav-item">
                             <a class="nav-link @IsPageActive("/Colaboradores")" asp-page="/Colaboradores/Index">
-                                <i class="bi bi-people"></i>
+                                <i class="bi bi-people me-2"></i>
                                 Colaboradores
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link @IsPageActive("/Departamentos")" asp-page="/Departamentos/Index">
-                                <i class="bi bi-briefcase"></i>
+                                <i class="bi bi-briefcase me-2"></i>
                                 Departamentos
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link @IsPageActive("/Funcoes")" asp-page="/Funcoes/Index">
-                                <i class="bi bi-award"></i>
+                                <i class="bi bi-award me-2"></i>
                                 Funções
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a class="nav-link @IsPageActive("/ParadaDeFabrica")" asp-page="/ParadaDeFabrica/Index">
+                                <i class="bi bi-calendar-x me-2"></i>
+                                Parada de Fábrica
                             </a>
                         </li>
                         @if (User.IsInRole("SuperAdmin"))
                         {
                             <li class="nav-item">
                                 <a class="nav-link @IsPageActive("/Usuarios")" asp-page="/Usuarios/Index">
-                                    <i class="bi bi-person-check"></i>
+                                    <i class="bi bi-person-check me-2"></i>
                                     Usuários do Sistema
                                 </a>
                             </li>

@@ -1,0 +1,59 @@
+﻿@page
+@model Portal_Refeicoes.Pages.ParadaDeFabrica.IndexModel
+@{
+    ViewData["Title"] = "Paradas de Fábrica";
+}
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h4>Agendar Nova Parada de Fábrica</h4>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+                    <div class="mb-3">
+                        <label asp-for="NovaParada.Data" class="form-label"></label>
+                        <input asp-for="NovaParada.Data" class="form-control" />
+                        <span asp-validation-for="NovaParada.Data" class="text-danger"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="NovaParada.Descricao" class="form-label"></label>
+                        <input asp-for="NovaParada.Descricao" class="form-control" />
+                        <span asp-validation-for="NovaParada.Descricao" class="text-danger"></span>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Agendar Parada</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <h4>Paradas Agendadas</h4>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model.Paradas)
+                {
+                    <tr>
+                        <td>@item.Data.ToString("dd/MM/yyyy")</td>
+                        <td>@item.Descricao</td>
+                        <td>
+                            <form method="post" asp-page-handler="Delete" asp-route-id="@item.Id">
+                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Tem certeza que deseja cancelar esta parada?')">
+                                    Cancelar
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

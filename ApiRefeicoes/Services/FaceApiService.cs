@@ -163,5 +163,30 @@ namespace ApiRefeicoes.Services
             Guid? faceId = await DetectFace(imageStream);
             return faceId?.ToString();
         }
+        public async Task DeletePersonAsync(Guid personId)
+        {
+            if (personId == Guid.Empty)
+            {
+                _logger.LogWarning("Tentativa de apagar uma pessoa com PersonId vazio (Guid.Empty).");
+                return;
+            }
+
+            await EnsurePersonGroupExistsAsync();
+            var client = GetClient();
+            try
+            {
+                await client.PersonGroupPerson.DeleteAsync(_personGroupId, personId);
+                _logger.LogInformation("Pessoa com PersonId {PersonId} foi apagada com sucesso do grupo.", personId);
+            }
+            catch (APIErrorException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+            {
+                _logger.LogWarning("Tentativa de apagar a pessoa com PersonId {PersonId}, mas ela não foi encontrada no grupo da Azure.", personId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro inesperado ao apagar a pessoa com PersonId {PersonId} do grupo da Azure.", personId);
+                throw;
+            }
+        }
     }
 }
