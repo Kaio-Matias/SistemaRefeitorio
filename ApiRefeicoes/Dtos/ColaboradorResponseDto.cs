@@ -8,5 +8,7 @@
         public string Funcao { get; set; }
         public string Departamento { get; set; }
         public bool Ativo { get; set; }
+        public byte[]? Foto { get; set; }
+  
     }
 }

@@ -1,35 +1,33 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Portal_Refeicoes.Models;
-using System.Text.Json;
+using Portal_Refeicoes.Services; // Adicione o using para o ApiClient
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Portal_Refeicoes.Pages.Colaboradores
 {
     [Authorize]
     public class IndexModel : PageModel
     {
-        private readonly IHttpClientFactory _clientFactory;
+        private readonly ApiClient _apiClient;
 
-        public IndexModel(IHttpClientFactory clientFactory)
+        // Correção 1: Injetar o ApiClient diretamente, assim como nas outras páginas.
+        public IndexModel(ApiClient apiClient)
         {
-            _clientFactory = clientFactory;
+            _apiClient = apiClient;
         }
 
-        public IList<Colaborador> Colaboradores { get; set; } = new List<Colaborador>();
+        // Correção 2: Usar o ColaboradorViewModel, que é o tipo correto retornado pela API.
+        public IList<ColaboradorViewModel> Colaboradores { get; set; } = new List<ColaboradorViewModel>();
 
         public async Task OnGetAsync()
         {
-            var client = _clientFactory.CreateClient("ApiClient");
-            var token = User.FindFirst("access_token")?.Value;
-            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-
-            var response = await client.GetAsync("/api/colaboradores");
-
-            if (response.IsSuccessStatusCode)
+            // Correção 3: Chamar o método GetColaboradoresAsync do ApiClient, que já cuida de tudo.
+            var colaboradores = await _apiClient.GetColaboradoresAsync();
+            if (colaboradores != null)
             {
-                var stream = await response.Content.ReadAsStreamAsync();
-                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                Colaboradores = await JsonSerializer.DeserializeAsync<List<Colaborador>>(stream, options);
+                Colaboradores = colaboradores;
             }
         }
     }

@@ -1,27 +1,21 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Portal_Refeicoes.Models;
-using Portal_Refeicoes.Services;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
-namespace Portal_Refeicoes.Pages.Colaboradores
+namespace Portal_Refeicoes.Pages
 {
+    [Authorize] // Garante que apenas usuários logados podem acessar esta página
     public class IndexModel : PageModel
     {
-        private readonly ApiClient _apiClient;
+        private readonly ILogger<IndexModel> _logger;
 
-        public IndexModel(ApiClient apiClient)
+        public IndexModel(ILogger<IndexModel> logger)
         {
-            _apiClient = apiClient;
+            _logger = logger;
         }
 
-        // CORREÇÃO: A propriedade deve ser do tipo ColaboradorViewModel
-        public IList<ColaboradorViewModel> Colaborador { get; set; }
-
-        public async Task OnGetAsync()
+        public void OnGet()
         {
-            // CORREÇÃO: Usa o ApiClient para buscar os dados corretamente
-            Colaborador = await _apiClient.GetColaboradoresAsync();
+            // No futuro, você pode carregar dados para o dashboard aqui
         }
     }
 }

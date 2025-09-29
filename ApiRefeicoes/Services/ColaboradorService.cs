@@ -33,26 +33,38 @@ namespace ApiRefeicoes.Services
                 Ativo = true // Define como ativo por padrão
             };
 
+            // --- INÍCIO DA CORREÇÃO ---
+
+            // 1. Copia o stream de upload (que não pode ser "rebobinado") para um 
+            //    MemoryStream que permite a reutilização dos dados da imagem.
             using (var memoryStream = new MemoryStream())
             {
                 await imagemStream.CopyToAsync(memoryStream);
-                colaborador.Foto = memoryStream.ToArray(); // Salva a foto no banco
+
+                // 2. Salva a foto no banco de dados usando os bytes do MemoryStream.
+                colaborador.Foto = memoryStream.ToArray();
+
+                // Adiciona o colaborador e salva para gerar o ID.
+                _context.Colaboradores.Add(colaborador);
+                await _context.SaveChangesAsync();
+
+                // 3. "Rebobina" o MemoryStream para o início. Agora ele está pronto
+                //    para ser lido novamente pela API da Azure.
+                memoryStream.Position = 0;
+
+                // 4. Cadastra a face na API do Azure usando o mesmo MemoryStream.
+                var personId = await _faceApiService.CreatePersonAsync(colaborador.Nome);
+                await _faceApiService.AddFaceToPersonAsync(personId, memoryStream);
+
+                // Inicia o treinamento do grupo de pessoas na Azure
+                await _faceApiService.TrainPersonGroupAsync();
+
+                // Atribui o Guid retornado pela Azure ao colaborador e salva novamente.
+                colaborador.PersonId = personId;
+                await _context.SaveChangesAsync();
             }
+            // --- FIM DA CORREÇÃO ---
 
-            _context.Colaboradores.Add(colaborador);
-            await _context.SaveChangesAsync();
-
-            // Cadastra a face na API do Azure
-            imagemStream.Position = 0; // Reseta o stream para o Face API usar
-            var personId = await _faceApiService.CreatePersonAsync(colaborador.Nome);
-            await _faceApiService.AddFaceToPersonAsync(personId, imagemStream);
-
-            // Inicia o treinamento do grupo de pessoas
-            await _faceApiService.TrainPersonGroupAsync();
-
-            // Atribuição direta do Guid, corrigindo o erro de conversão
-            colaborador.PersonId = personId;
-            await _context.SaveChangesAsync();
 
             // Mapeia do Modelo para o DTO de resposta
             var funcao = await _context.Funcoes.FindAsync(colaborador.FuncaoId);
@@ -83,7 +95,8 @@ namespace ApiRefeicoes.Services
                     CartaoPonto = c.CartaoPonto,
                     Funcao = c.Funcao.Nome,
                     Departamento = c.Departamento.Nome,
-                    Ativo = c.Ativo
+                    Ativo = c.Ativo,
+                    Foto = c.Foto
                 }).ToListAsync();
         }
 
