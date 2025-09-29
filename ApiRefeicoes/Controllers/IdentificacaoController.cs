@@ -1,14 +1,9 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using ApiRefeicoes.Services;
-using System.IO;
 using ApiRefeicoes.Data;
 using Microsoft.EntityFrameworkCore;
-using System;
 using Microsoft.AspNetCore.Authorization;
 using ApiRefeicoes.Models;
-using System.Linq; // Adicione este using para o .Where() em memória
 
 namespace ApiRefeicoes.Controllers
 {
@@ -36,69 +31,57 @@ namespace ApiRefeicoes.Controllers
                 return BadRequest(new { Sucesso = false, Mensagem = "Nenhuma imagem foi enviada." });
             }
 
-            _logger.LogInformation("Requisição para registar ponto recebida.");
+            _logger.LogInformation("Requisição para registrar ponto recebida.");
 
-            using var memoryStreamApp = new MemoryStream();
-            await file.CopyToAsync(memoryStreamApp);
-            var imageBytesApp = memoryStreamApp.ToArray();
+            Guid? faceId;
+            using (var memoryStream = new MemoryStream())
+            {
+                await file.CopyToAsync(memoryStream);
+                memoryStream.Position = 0; // Reseta a posição do stream para o início
+                faceId = await _faceApiService.DetectFace(memoryStream);
+            }
 
-            var faceIdApp = await _faceApiService.DetectFace(imageBytesApp);
-            if (faceIdApp == null)
+            if (faceId == null)
             {
                 return Ok(new { Sucesso = false, Mensagem = "Não foi possível detetar um rosto na imagem enviada." });
             }
 
-            // ==================================================================
-            // SOLUÇÃO DEFINITIVA: AVALIAÇÃO NO LADO DO CLIENTE
-            // 1. Primeiro, trazemos todos os colaboradores para a memória.
-            var todosOsColaboradores = await _context.Colaboradores.ToListAsync();
+            var personId = await _faceApiService.IdentifyFaceAsync(faceId.Value);
 
-            // 2. DEPOIS, filtramos a lista na memória da aplicação.
-            //    Isto evita o erro de tradução do LINQ para SQL.
-            var colaboradoresComFoto = todosOsColaboradores
-                                           .Where(c => c.Foto != null && c.Foto.Length > 0)
-                                           .ToList();
-            // ==================================================================
-
-            _logger.LogInformation("A comparar com {Count} colaboradores com foto.", colaboradoresComFoto.Count);
-
-            foreach (var colaborador in colaboradoresComFoto)
+            if (personId == null)
             {
-                var faceIdCadastro = await _faceApiService.DetectFace(colaborador.Foto);
-                if (faceIdCadastro == null)
-                {
-                    _logger.LogWarning("A foto do colaborador {Nome} não tem um rosto detetável.", colaborador.Nome);
-                    continue;
-                }
-
-                var (isIdentical, confidence) = await _faceApiService.VerifyFaces(faceIdApp.Value, faceIdCadastro.Value);
-                _logger.LogInformation("A verificar {Nome}: Idêntico={isIdentical}, Confiança={confidence}", colaborador.Nome, isIdentical, confidence);
-
-                if (isIdentical && confidence > 0.6)
-                {
-                    _logger.LogInformation("SUCESSO: Colaborador {Nome} identificado.", colaborador.Nome);
-                    var registroRefeicao = new RegistroRefeicao
-                    {
-                        ColaboradorId = colaborador.Id,
-                        HorarioRegistro = DateTime.Now,
-                        ValorRefeicao = 17,
-                        Dispositivo = "Aplicação Móvel"
-                    };
-                    _context.RegistroRefeicoes.Add(registroRefeicao);
-                    await _context.SaveChangesAsync();
-
-                    return Ok(new
-                    {
-                        Sucesso = true,
-                        Nome = colaborador.Nome,
-                        FotoBase64 = Convert.ToBase64String(colaborador.Foto),
-                        Mensagem = "Bem-vindo(a)!"
-                    });
-                }
+                _logger.LogWarning("Falha na identificação: Nenhum colaborador correspondente foi encontrado no grupo de pessoas.");
+                return Ok(new { Sucesso = false, Mensagem = "Rosto não reconhecido." });
             }
 
-            _logger.LogWarning("Falha na identificação: Nenhum colaborador correspondente foi encontrado.");
-            return Ok(new { Sucesso = false, Mensagem = "Rosto não reconhecido." });
+            var colaborador = await _context.Colaboradores.FirstOrDefaultAsync(c => c.PersonId == personId.Value);
+
+            if (colaborador == null)
+            {
+                _logger.LogError("INCONSISTÊNCIA DE DADOS: PersonId {PersonId} retornado pelo Azure mas não encontrado no banco de dados.", personId.Value);
+                return StatusCode(500, new { Sucesso = false, Mensagem = "Erro de consistência nos dados. Contate o administrador." });
+            }
+
+            _logger.LogInformation("SUCESSO: Colaborador {Nome} identificado.", colaborador.Nome);
+
+            var registroRefeicao = new RegistroRefeicao
+            {
+                ColaboradorId = colaborador.Id,
+                DataHoraRegistro = DateTime.Now, // Corrigido de HorarioRegistro
+                ValorRefeicao = 17, // Exemplo
+                TipoRefeicao = "Almoço", // Exemplo
+                ParadaDeFabrica = false // Exemplo
+            };
+            _context.RegistroRefeicoes.Add(registroRefeicao);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                Sucesso = true,
+                Nome = colaborador.Nome,
+                FotoBase64 = colaborador.Foto != null ? Convert.ToBase64String(colaborador.Foto) : null,
+                Mensagem = "Bem-vindo(a)!"
+            });
         }
     }
 }

@@ -55,8 +55,8 @@ namespace ApiRefeicoes.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<Guid?>("AzurePersonId")
-                        .HasColumnType("uniqueidentifier");
+                    b.Property<bool>("Ativo")
+                        .HasColumnType("bit");
 
                     b.Property<string>("CartaoPonto")
                         .IsRequired()
@@ -78,6 +78,9 @@ namespace ApiRefeicoes.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Guid?>("PersonId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DepartamentoId");
@@ -94,6 +97,9 @@ namespace ApiRefeicoes.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("DepartamentoGenerico")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Nome")
                         .HasColumnType("nvarchar(max)");
@@ -162,15 +168,17 @@ namespace ApiRefeicoes.Migrations
                     b.Property<int>("ColaboradorId")
                         .HasColumnType("int");
 
-                    b.Property<string>("Dispositivo")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("HorarioRegistro")
+                    b.Property<DateTime>("DataHoraRegistro")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("ParadaDeFabrica")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("TipoRefeicao")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<decimal>("ValorRefeicao")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.HasKey("Id");
 
@@ -187,11 +195,7 @@ namespace ApiRefeicoes.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Nome")
+                    b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
@@ -199,7 +203,7 @@ namespace ApiRefeicoes.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("SenhaHash")
+                    b.Property<string>("Username")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 

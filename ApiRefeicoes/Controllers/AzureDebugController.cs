@@ -1,6 +1,10 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using ApiRefeicoes.Services;
-using Microsoft.Azure.CognitiveServices.Vision.Face.Models;
+using Microsoft.AspNetCore.Http;
+using System.IO;
+using System.Threading.Tasks;
+using System;
+using Microsoft.Extensions.Logging;
 
 namespace ApiRefeicoes.Controllers
 {
@@ -18,107 +22,72 @@ namespace ApiRefeicoes.Controllers
         }
 
         [HttpGet("training-status")]
-        public async Task<ActionResult<object>> GetTrainingStatus()
+        public async Task<IActionResult> GetTrainingStatus()
         {
-            try
-            {
-                var status = await _faceApiService.GetTrainingStatusAsync();
-                return Ok(new
-                {
-                    Status = status.Status.ToString(),
-                    Created = status.Created,
-                    LastAction = status.LastAction,
-                    Message = status.Message
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro inesperado ao verificar o estado do treino.");
-                return StatusCode(500, "Ocorreu um erro interno. Verifique os logs do servidor.");
-            }
+            var status = await _faceApiService.GetTrainingStatusAsync();
+            return Ok(status);
         }
 
-        [HttpGet("force-train")]
-        public async Task<IActionResult> ForceTrain()
+        [HttpPost("ensure-group")]
+        public async Task<IActionResult> EnsureGroup()
         {
-            try
-            {
-                _logger.LogInformation("A forçar o treino do grupo de pessoas manualmente.");
-                await _faceApiService.TrainPersonGroupAsync();
-                return Ok(new { Message = "Comando de treino enviado com sucesso. Verifique o estado em alguns segundos." });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao forçar o treino.");
-                return StatusCode(500, new { Message = "Ocorreu um erro ao tentar iniciar o treino.", Details = ex.Message });
-            }
-        }
-        
-        // O método HardReset agora chama EnsurePersonGroupExistsAsync diretamente,
-        // o que é mais seguro do que chamar GetTrainingStatusAsync para um grupo novo.
-        [HttpGet("hard-reset")]
-        public async Task<IActionResult> HardReset()
-        {
-            try
-            {
-                _logger.LogWarning("!!! INICIANDO HARD RESET DO PERSON GROUP !!!");
-                await _faceApiService.DeletePersonGroupAsync();
-                // Apenas garante que o grupo seja recriado.
-                await _faceApiService.EnsurePersonGroupExistsAsync();
-                _logger.LogInformation("!!! HARD RESET CONCLUÍDO. O GRUPO FOI APAGADO E RECRIADO. !!!");
-                return Ok(new { Message = "Hard Reset concluído. O grupo 'colaboradores' foi apagado e recriado. Por favor, cadastre um novo colaborador para iniciar o treino." });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro durante o Hard Reset.");
-                return StatusCode(500, new { Message = "Ocorreu um erro durante o Hard Reset.", Details = ex.Message });
-            }
+            await _faceApiService.EnsurePersonGroupExistsAsync();
+            return Ok("Grupo de pessoas verificado/criado com sucesso.");
         }
 
-        [HttpPost("verify-faces")]
-        public async Task<ActionResult<object>> VerifyFaces([FromForm] IFormFile fotoCadastro, [FromForm] IFormFile fotoApp)
+        [HttpPost("train-group")]
+        public async Task<IActionResult> TrainGroup()
         {
-            if (fotoCadastro == null || fotoApp == null)
+            await _faceApiService.TrainPersonGroupAsync();
+            return Ok("Treinamento do grupo iniciado.");
+        }
+
+        [HttpDelete("delete-group")]
+        public async Task<IActionResult> DeleteGroup()
+        {
+            await _faceApiService.DeletePersonGroupAsync();
+            return Ok("Grupo de pessoas deletado (se existia).");
+        }
+
+        [HttpPost("detect")]
+        public async Task<IActionResult> Detect(IFormFile file)
+        {
+            if (file == null || file.Length == 0) return BadRequest("Arquivo não enviado.");
+
+            using var stream = file.OpenReadStream();
+            var faceId = await _faceApiService.DetectFace(stream);
+
+            if (faceId != null)
+                return Ok(new { faceId });
+
+            return NotFound("Nenhuma face detetada.");
+        }
+
+        [HttpPost("verify")]
+        public async Task<IActionResult> Verify(IFormFile file1, IFormFile file2)
+        {
+            if (file1 == null || file2 == null) return BadRequest("Envie dois arquivos de imagem.");
+
+            string faceId1, faceId2;
+
+            using (var stream1 = file1.OpenReadStream())
             {
-                return BadRequest("É necessário enviar duas imagens: 'fotoCadastro' e 'fotoApp'.");
+                faceId1 = await _faceApiService.DetectFaceAndGetId(stream1);
             }
 
-            try
+            using (var stream2 = file2.OpenReadStream())
             {
-                using var ms1 = new MemoryStream();
-                await fotoCadastro.CopyToAsync(ms1);
-                var bytesCadastro = ms1.ToArray();
-
-                using var ms2 = new MemoryStream();
-                await fotoApp.CopyToAsync(ms2);
-                var bytesApp = ms2.ToArray();
-
-                var faceIdCadastroStr = await _faceApiService.DetectFaceAndGetId(bytesCadastro, bypassIdentify: true);
-                var faceIdAppStr = await _faceApiService.DetectFaceAndGetId(bytesApp, bypassIdentify: true);
-
-                if (string.IsNullOrEmpty(faceIdCadastroStr) || string.IsNullOrEmpty(faceIdAppStr))
-                {
-                    return BadRequest("Não foi possível detetar um rosto em uma ou ambas as imagens.");
-                }
-
-                Guid.TryParse(faceIdCadastroStr, out Guid faceIdCadastro);
-                Guid.TryParse(faceIdAppStr, out Guid faceIdApp);
-
-                var (isIdentical, confidence) = await _faceApiService.VerifyFaces(faceIdCadastro, faceIdApp);
-
-                return Ok(new { 
-                    IsIdentical = isIdentical, 
-                    Confidence = confidence,
-                    Message = isIdentical 
-                        ? "As faces correspondem! O problema é 100% o estado do treino do Grupo de Pessoas." 
-                        : "As faces não correspondem. Verifique a qualidade de ambas as imagens."
-                });
+                faceId2 = await _faceApiService.DetectFaceAndGetId(stream2);
             }
-            catch (Exception ex)
+
+            if (string.IsNullOrEmpty(faceId1) || string.IsNullOrEmpty(faceId2))
             {
-                _logger.LogError(ex, "Erro ao verificar faces.");
-                return StatusCode(500, new { Message = "Ocorreu um erro interno durante a verificação.", Details = ex.Message });
+                return NotFound("Não foi possível detetar faces em uma ou ambas as imagens.");
             }
+
+            var (isIdentical, confidence) = await _faceApiService.VerifyFaces(Guid.Parse(faceId1), Guid.Parse(faceId2));
+
+            return Ok(new { isIdentical, confidence });
         }
     }
 }

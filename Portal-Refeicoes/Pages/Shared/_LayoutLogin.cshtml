@@ -8,14 +8,13 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body class="login-page-body">
-
     <div class="container-fluid h-100">
         <div class="row h-100">
-            <div class="col-lg-9 d-none d-lg-block login-image-section">
+            <div class="col-lg-8 d-none d-lg-block login-image-section">
             </div>
 
-            <div class="col-lg-3 col-md-12 login-form-section">
-                <main role="main" class="w-100 h-100 d-flex justify-content-center">
+            <div class="col-lg-4 col-md-12 login-form-section d-flex align-items-center justify-content-center">
+                <main role="main" class="w-100">
                     @RenderBody()
                 </main>
             </div>
@@ -24,11 +23,6 @@
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-    <script>
-        feather.replace()
-    </script>
-
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

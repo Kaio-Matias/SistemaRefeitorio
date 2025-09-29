@@ -1,57 +1,80 @@
-// ApiRefeicoes/Program.cs
-
+using System.Text;
 using ApiRefeicoes.Data;
 using ApiRefeicoes.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Adicionar services ao contêiner.
-builder.Services.AddControllers();
-
-// Configuração do DbContext para o Entity Framework Core
+// Adicionar serviços ao contêiner.
 builder.Services.AddDbContext<ApiRefeicoesDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Configuração da autenticação JWT
-var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]);
-builder.Services.AddAuthentication(options =>
+// Registrar FaceApiService CORRETAMENTE
+builder.Services.AddSingleton<FaceApiService>();
+
+// Registrar a camada de serviço
+builder.Services.AddScoped<IColaboradorService, ColaboradorService>();
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+
+// Configuração do Swagger para aceitar token JWT
+builder.Services.AddSwaggerGen(c =>
 {
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.RequireHttpsMetadata = false;
-    options.SaveToken = true;
-    options.TokenValidationParameters = new TokenValidationParameters
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "API Refeitório", Version = "v1" });
+
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(key),
-        ValidateIssuer = false, // Em produção, considere validar o Issuer
-        ValidateAudience = false // Em produção, considere validar a Audience
-    };
+        Name = "Authorization",
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Insira o token JWT desta forma: Bearer {seu token}"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
 });
 
 
-// ==================================================================
-// INÍCIO DA CORREÇÃO
-// ==================================================================
-// Registrando os serviços no sistema de injeção de dependência.
-// Estas linhas informam à API como criar os serviços quando eles forem necessários.
-builder.Services.AddScoped<TokenService>();
-builder.Services.AddScoped<FaceApiService>(); // <-- ADICIONE ESTA LINHA
-// ==================================================================
-// FIM DA CORREÇÃO
-// ==================================================================
+// Configuração da autenticação JWT
+var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]);
+builder.Services.AddAuthentication(x =>
+{
+    x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(x =>
+{
+    x.RequireHttpsMetadata = false;
+    x.SaveToken = true;
+    x.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ValidateIssuer = false,
+        ValidateAudience = false
+    };
+});
 
-
-// Configuração do Swagger/OpenAPI
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// Adicionar Logging
+builder.Services.AddLogging();
 
 var app = builder.Build();
 
@@ -60,12 +83,10 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-    app.UseDeveloperExceptionPage(); // Adiciona a página de exceção de desenvolvedor
 }
 
 app.UseHttpsRedirection();
 
-// Adiciona o middleware de autenticação e autorização
 app.UseAuthentication();
 app.UseAuthorization();
 

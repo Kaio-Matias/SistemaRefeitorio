@@ -1,77 +1,47 @@
 ﻿using ApiRefeicoes.Data;
 using ApiRefeicoes.Models;
 using ApiRefeicoes.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Threading.Tasks;
 
 namespace ApiRefeicoes.Controllers
 {
-    public class LoginRequest
-    {
-        public string? Email { get; set; }
-        public string? Senha { get; set; }
-        public string? DeviceIdentifier { get; set; } 
-        public string? NomeDispositivo { get; set; } 
-    }
-
-    [Route("api/[controller]")]
     [ApiController]
+    [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
         private readonly ApiRefeicoesDbContext _context;
         private readonly TokenService _tokenService;
 
-        public AuthController(ApiRefeicoesDbContext context, TokenService tokenService)
+        public AuthController(ApiRefeicoesDbContext context, IConfiguration configuration)
         {
             _context = context;
-            _tokenService = tokenService;
+            _tokenService = new TokenService(configuration);
         }
 
+        [AllowAnonymous]
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginRequest loginRequest)
+        public async Task<IActionResult> Login([FromBody] LoginRequest model)
         {
-            var user = await _context.Usuarios.SingleOrDefaultAsync(u => u.Email == loginRequest.Email);
+            // CORREÇÃO: Busca por 'Username' em vez de 'Email'
+            var usuario = await _context.Usuarios
+                                        .FirstOrDefaultAsync(u => u.Username == model.Username);
 
-            if (user == null || !BCrypt.Net.BCrypt.Verify(loginRequest.Senha, user.SenhaHash))
+            if (usuario == null || !BCrypt.Net.BCrypt.Verify(model.Password, usuario.PasswordHash))
             {
-                return Unauthorized("Email ou senha inválidos.");
+                return Unauthorized(new { message = "Usuário ou senha inválidos." });
             }
 
-            if (!string.IsNullOrEmpty(loginRequest.DeviceIdentifier))
-            {
-                var dispositivo = await _context.Dispositivos
-                    .FirstOrDefaultAsync(d => d.UsuarioId == user.Id && d.DeviceIdentifier == loginRequest.DeviceIdentifier);
-
-                if (dispositivo == null)
-                {
-                    dispositivo = new Dispositivo
-                    {
-                        UsuarioId = user.Id,
-                        DeviceIdentifier = loginRequest.DeviceIdentifier,
-                        Nome = loginRequest.NomeDispositivo,
-                        UltimoLogin = DateTime.UtcNow,
-                        IsAtivo = true
-                    };
-                    _context.Dispositivos.Add(dispositivo);
-                }
-                else
-                {
-                    dispositivo.UltimoLogin = DateTime.UtcNow;
-                    dispositivo.IsAtivo = true;
-                    _context.Dispositivos.Update(dispositivo);
-                }
-            }
-
-            await _context.SaveChangesAsync();
-
-            var token = _tokenService.GenerateToken(user);
-
-            return Ok(new
-            {
-                User = new { user.Email, user.Nome, user.Role },
-                Token = token
-            });
+            var token = _tokenService.GenerateToken(usuario);
+            return Ok(new { token });
         }
+    }
+
+    public class LoginRequest
+    {
+        public string Username { get; set; }
+        public string Password { get; set; }
     }
 }

@@ -1,11 +1,10 @@
-﻿// ApiRefeicoes/Services/TokenService.cs
-
-using ApiRefeicoes.Models;
-using Microsoft.IdentityModel.Tokens;
-using System;
+﻿using System;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using ApiRefeicoes.Models;
+using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
 
 namespace ApiRefeicoes.Services
 {
@@ -27,9 +26,14 @@ namespace ApiRefeicoes.Services
             {
                 Subject = new ClaimsIdentity(new[]
                 {
-                    // MODIFICAÇÃO: Adiciona o ID do usuário (NameIdentifier) ao token
+                    // Adiciona o ID do usuário (NameIdentifier) ao token
                     new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
-                    new Claim(ClaimTypes.Email, usuario.Email),
+                    
+                    // CORREÇÃO: Troca a claim de 'Email' para 'Name', usando a propriedade 'Username' que existe no modelo.
+                    new Claim(ClaimTypes.Name, usuario.Username),
+                    
+                    // Adiciona o Role (perfil) do usuário ao token
+                    new Claim(ClaimTypes.Role, usuario.Role)
                 }),
                 Expires = DateTime.UtcNow.AddHours(8), // Duração do token
                 Issuer = _configuration["Jwt:Issuer"],

@@ -1,110 +1,86 @@
-// Portal-Refeicoes/Pages/Login.cshtml.cs
-
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Portal_Refeicoes.Services;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
-using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace Portal_Refeicoes.Pages
 {
+    [AllowAnonymous] // Permite acesso a esta página sem estar logado
     public class LoginModel : PageModel
     {
-        private readonly IHttpClientFactory _clientFactory;
+        private readonly ApiClient _apiClient;
 
-        public LoginModel(IHttpClientFactory clientFactory)
+        public LoginModel(ApiClient apiClient)
         {
-            _clientFactory = clientFactory;
+            _apiClient = apiClient;
         }
 
         [BindProperty]
         public InputModel Input { get; set; }
 
+        public string ReturnUrl { get; set; }
+
+        [TempData]
         public string ErrorMessage { get; set; }
 
         public class InputModel
         {
-            [Required]
-            [EmailAddress]
-            public string Email { get; set; }
+            [Required(ErrorMessage = "O nome de usuário é obrigatório.")]
+            [Display(Name = "Usuário")]
+            public string Username { get; set; }
 
-            [Required]
+            [Required(ErrorMessage = "A senha é obrigatória.")]
             [DataType(DataType.Password)]
             public string Password { get; set; }
         }
 
-        public async Task<IActionResult> OnGetAsync()
+        public async Task OnGetAsync(string returnUrl = null)
         {
             if (User.Identity.IsAuthenticated)
             {
-                return RedirectToPage("/Index");
+                Response.Redirect("/");
             }
+            ReturnUrl = returnUrl ?? Url.Content("~/");
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        }
+
+        public async Task<IActionResult> OnPostAsync(string returnUrl = null)
+        {
+            ReturnUrl = returnUrl ?? Url.Content("~/");
+
+            if (ModelState.IsValid)
+            {
+                var token = await _apiClient.LoginAsync(Input.Username, Input.Password);
+
+                if (token != null)
+                {
+                    HttpContext.Session.SetString("JWToken", token);
+
+                    var claims = new List<Claim>
+                    {
+                        new Claim(ClaimTypes.Name, Input.Username),
+                    };
+
+                    var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+
+                    await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(claimsIdentity));
+
+                    return LocalRedirect(ReturnUrl);
+                }
+                else
+                {
+                    ErrorMessage = "Usuário ou senha inválidos.";
+                    return Page();
+                }
+            }
+
             return Page();
         }
-
-        public async Task<IActionResult> OnPostAsync()
-        {
-            if (!ModelState.IsValid)
-            {
-                return Page();
-            }
-
-            var client = _clientFactory.CreateClient("ApiClient");
-
-            // ==================================================================
-            // INÍCIO DA CORREÇÃO
-            // ==================================================================
-            // Criamos um objeto anônimo para garantir que o JSON enviado
-            // tenha as propriedades "Email" e "Senha", exatamente como a API espera.
-            var loginPayload = new { Email = Input.Email, Senha = Input.Password };
-
-            var response = await client.PostAsJsonAsync("api/auth/login", loginPayload);
-            // ==================================================================
-            // FIM DA CORREÇÃO
-            // ==================================================================
-
-            if (response.IsSuccessStatusCode)
-            {
-                var responseStream = await response.Content.ReadAsStreamAsync();
-                var authResult = await JsonSerializer.DeserializeAsync<AuthResult>(responseStream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                var claims = new List<Claim>
-                {
-                    new Claim(ClaimTypes.Email, authResult.User.Email),
-                    new Claim(ClaimTypes.Name, authResult.User.Nome),
-                    new Claim(ClaimTypes.Role, authResult.User.Role),
-                    new Claim("access_token", authResult.Token)
-                };
-
-                var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-
-                await HttpContext.SignInAsync(
-                    CookieAuthenticationDefaults.AuthenticationScheme,
-                    new ClaimsPrincipal(claimsIdentity));
-
-                return RedirectToPage("/Index");
-            }
-            else
-            {
-                ErrorMessage = "Falha no login. Verifique suas credenciais.";
-                return Page();
-            }
-        }
-    }
-
-    // Classes auxiliares para deserializar a resposta da API
-    public class AuthResult
-    {
-        public UserInfo User { get; set; }
-        public string Token { get; set; }
-    }
-
-    public class UserInfo
-    {
-        public string Email { get; set; }
-        public string Nome { get; set; }
-        public string Role { get; set; }
     }
 }

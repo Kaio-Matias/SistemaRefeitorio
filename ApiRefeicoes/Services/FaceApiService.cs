@@ -26,13 +26,25 @@ namespace ApiRefeicoes.Services
             return new FaceClient(new ApiKeyServiceClientCredentials(_apiKey)) { Endpoint = _endpoint };
         }
 
-        public async Task<Guid?> DetectFace(byte[] imageBytes)
+        public async Task<Guid?> DetectFace(Stream imageStream)
         {
             var client = GetClient();
-            using var stream = new MemoryStream(imageBytes);
             try
             {
-                var detectedFaces = await client.Face.DetectWithStreamAsync(stream, recognitionModel: _recognitionModel, detectionModel: DetectionModel.Detection03);
+                // Garante que o stream possa ser lido múltiplas vezes se necessário
+                if (!imageStream.CanSeek)
+                {
+                    var memoryStream = new MemoryStream();
+                    await imageStream.CopyToAsync(memoryStream);
+                    memoryStream.Position = 0;
+                    imageStream = memoryStream;
+                }
+                else
+                {
+                    imageStream.Position = 0;
+                }
+
+                var detectedFaces = await client.Face.DetectWithStreamAsync(imageStream, recognitionModel: _recognitionModel, detectionModel: DetectionModel.Detection03);
                 if (detectedFaces.Any())
                 {
                     var firstFace = detectedFaces.First();
@@ -46,21 +58,6 @@ namespace ApiRefeicoes.Services
             {
                 _logger.LogError(apiEx, "Erro na API do Azure (Detetar): {Message}", apiEx.Body?.Error?.Message);
                 return null;
-            }
-        }
-
-        public async Task<(bool isIdentical, double confidence)> VerifyFaces(Guid faceId1, Guid faceId2)
-        {
-            var client = GetClient();
-            try
-            {
-                var result = await client.Face.VerifyFaceToFaceAsync(faceId1, faceId2);
-                return (result.IsIdentical, result.Confidence);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao verificar faces.");
-                return (false, 0);
             }
         }
 
@@ -99,7 +96,7 @@ namespace ApiRefeicoes.Services
             }
         }
 
-        public async Task<Guid?> CreatePersonAsync(string name)
+        public async Task<Guid> CreatePersonAsync(string name)
         {
             await EnsurePersonGroupExistsAsync();
             var client = GetClient();
@@ -107,12 +104,12 @@ namespace ApiRefeicoes.Services
             return person.PersonId;
         }
 
-        public async Task<PersistedFace> AddFaceToPersonAsync(Guid personId, byte[] imageBytes)
+        public async Task<PersistedFace> AddFaceToPersonAsync(Guid personId, Stream imageStream)
         {
             await EnsurePersonGroupExistsAsync();
             var client = GetClient();
-            using var stream = new MemoryStream(imageBytes);
-            return await client.PersonGroupPerson.AddFaceFromStreamAsync(_personGroupId, personId, stream, detectionModel: DetectionModel.Detection03);
+            imageStream.Position = 0;
+            return await client.PersonGroupPerson.AddFaceFromStreamAsync(_personGroupId, personId, imageStream, detectionModel: DetectionModel.Detection03);
         }
 
         public async Task TrainPersonGroupAsync()
@@ -123,7 +120,7 @@ namespace ApiRefeicoes.Services
             await client.PersonGroup.TrainAsync(_personGroupId);
         }
 
-        // --- MÉTODOS ADICIONADOS PARA CORRIGIR O AZUREDEBUGCONTROLLER ---
+        // --- MÉTODOS DE DEBUG RESTAURADOS ---
 
         public async Task<TrainingStatus> GetTrainingStatusAsync()
         {
@@ -146,10 +143,24 @@ namespace ApiRefeicoes.Services
             }
         }
 
-        // Wrapper para manter a compatibilidade com o controller de debug
-        public async Task<string> DetectFaceAndGetId(byte[] imageBytes, bool bypassIdentify = false)
+        public async Task<(bool isIdentical, double confidence)> VerifyFaces(Guid faceId1, Guid faceId2)
         {
-            Guid? faceId = await DetectFace(imageBytes);
+            var client = GetClient();
+            try
+            {
+                var result = await client.Face.VerifyFaceToFaceAsync(faceId1, faceId2);
+                return (result.IsIdentical, result.Confidence);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao verificar faces.");
+                return (false, 0);
+            }
+        }
+
+        public async Task<string> DetectFaceAndGetId(Stream imageStream)
+        {
+            Guid? faceId = await DetectFace(imageStream);
             return faceId?.ToString();
         }
     }

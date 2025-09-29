@@ -19,33 +19,38 @@
                         <div class="alert alert-success">@Model.SuccessMessage</div>
                         <a asp-page="/Login" class="btn btn-primary">Ir para Login</a>
                     }
-                    @if (Model.ErrorMessage != null)
+                    else // Só mostra o formulário se não houver mensagem de sucesso
                     {
-                        <div class="alert alert-danger">@Model.ErrorMessage</div>
-                    }
+                        @if (Model.ErrorMessage != null)
+                        {
+                            <div class="alert alert-danger">@Model.ErrorMessage</div>
+                        }
 
-                    <form method="post" enctype="multipart/form-data">
-                        <div class="form-group mb-3">
-                            <label asp-for="Input.Nome" class="form-label"></label>
-                            <input asp-for="Input.Nome" class="form-control" />
-                            <span asp-validation-for="Input.Nome" class="text-danger"></span>
-                        </div>
-                        <div class="form-group mb-3">
-                            <label asp-for="Input.Email" class="form-label"></label>
-                            <input asp-for="Input.Email" class="form-control" />
-                            <span asp-validation-for="Input.Email" class="text-danger"></span>
-                        </div>
-                        <div class="form-group mb-3">
-                            <label asp-for="Input.Senha" class="form-label"></label>
-                            <input asp-for="Input.Senha" type="password" class="form-control" />
-                            <span asp-validation-for="Input.Senha" class="text-danger"></span>
-                        </div>
-                        <div class="d-grid">
-                            <button type="submit" class="btn btn-success">Criar SuperAdmin</button>
-                        </div>
-                    </form>
+                        <form method="post">
+                            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+                            <div class="form-group mb-3">
+                                <label asp-for="Input.Username" class="form-label"></label>
+                                <input asp-for="Input.Username" class="form-control" />
+                                <span asp-validation-for="Input.Username" class="text-danger"></span>
+                            </div>
+                            <div class="form-group mb-3">
+                                <label asp-for="Input.Senha" class="form-label"></label>
+                                <input asp-for="Input.Senha" type="password" class="form-control" />
+                                <span asp-validation-for="Input.Senha" class="text-danger"></span>
+                            </div>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-success">Criar SuperAdmin</button>
+                            </div>
+                        </form>
+                    }
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}

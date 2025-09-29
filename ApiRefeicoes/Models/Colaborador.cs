@@ -8,12 +8,12 @@ namespace ApiRefeicoes.Models
         public string CartaoPonto { get; set; }
         public string Nome { get; set; }
         public byte[]? Foto { get; set; }
-        public Guid? AzurePersonId { get; set; }
+        public Guid? PersonId { get; set; } 
         public string? FotoBase64 { get; set; }
         public int DepartamentoId { get; set; }
         public Departamento Departamento { get; set; }
         public int FuncaoId { get; set; }
         public Funcao Funcao { get; set; }
-        
+        public bool Ativo { get; set; } // Adicionado
     }
 }

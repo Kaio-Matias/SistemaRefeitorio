@@ -1,42 +1,64 @@
 ﻿@page
-@model Portal_Refeicoes.Pages.IndexModel
+@model Portal_Refeicoes.Pages.Colaboradores.IndexModel
+
 @{
-    ViewData["Title"] = "Dashboard";
+    ViewData["Title"] = "Colaboradores";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Bem-vindo, @User.Identity.Name!</h1>
-    <p>Selecione uma opção no menu lateral para começar a gerenciar o sistema.</p>
-</div>
+<p>
+    <a asp-page="Create" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Novo Colaborador
+    </a>
+</p>
 
-<hr />
-
-<div class="row">
-    <div class="col-md-4">
-        <div class="card text-white bg-primary mb-3">
-            <div class="card-header">Colaboradores</div>
-            <div class="card-body">
-                <h5 class="card-title">150</h5>
-                <p class="card-text">Total de colaboradores ativos.</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card text-white bg-success mb-3">
-            <div class="card-header">Refeições Hoje</div>
-            <div class="card-body">
-                <h5 class="card-title">125</h5>
-                <p class="card-text">Registros de refeição no dia de hoje.</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card text-white bg-info mb-3">
-            <div class="card-header">Alertas</div>
-            <div class="card-body">
-                <h5 class="card-title">3</h5>
-                <p class="card-text">Alertas pendentes de verificação.</p>
-            </div>
-        </div>
-    </div>
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead>
+            <tr>
+                <th>
+                    @Html.DisplayNameFor(model => model.Colaborador[0].Nome)
+                </th>
+                <th>
+                    @Html.DisplayNameFor(model => model.Colaborador[0].CartaoPonto)
+                </th>
+                <th>
+                    @Html.DisplayNameFor(model => model.Colaborador[0].Funcao)
+                </th>
+                <th>
+                    @Html.DisplayNameFor(model => model.Colaborador[0].Departamento)
+                </th>
+                <th>
+                    @Html.DisplayNameFor(model => model.Colaborador[0].Ativo)
+                </th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model.Colaborador)
+            {
+                <tr>
+                    <td>
+                        @Html.DisplayFor(modelItem => item.Nome)
+                    </td>
+                    <td>
+                        @Html.DisplayFor(modelItem => item.CartaoPonto)
+                    </td>
+                    <td>
+                        @Html.DisplayFor(modelItem => item.Funcao)
+                    </td>
+                    <td>
+                        @Html.DisplayFor(modelItem => item.Departamento)
+                    </td>
+                    <td>
+                        @(item.Ativo ? "Sim" : "Não")
+                    </td>
+                    <td>
+                        <a asp-page="./Edit" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">Editar</a>
+                        <a asp-page="./Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-info">Detalhes</a>
+                        <a asp-page="./Delete" asp-route-id="@item.Id" class="btn btn-sm btn-outline-danger">Deletar</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
 </div>

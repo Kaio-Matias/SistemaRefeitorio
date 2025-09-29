@@ -1,217 +1,93 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using ApiRefeicoes.Data;
-using ApiRefeicoes.Models;
 using ApiRefeicoes.Services;
+using ApiRefeicoes.Dtos;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+using Microsoft.AspNetCore.Http;
+using System;
+using Microsoft.Extensions.Logging; // Adicionado para logging
 
 namespace ApiRefeicoes.Controllers
 {
+    [Authorize] // A segurança está reativada
     [Route("api/[controller]")]
     [ApiController]
     public class ColaboradoresController : ControllerBase
     {
-        private readonly ApiRefeicoesDbContext _context;
-        private readonly FaceApiService _faceApiService;
+        private readonly IColaboradorService _colaboradorService;
+        private readonly ILogger<ColaboradoresController> _logger; // Injetando o logger
 
-        public ColaboradoresController(ApiRefeicoesDbContext context, FaceApiService faceApiService)
+        public ColaboradoresController(IColaboradorService colaboradorService, ILogger<ColaboradoresController> logger)
         {
-            _context = context;
-            _faceApiService = faceApiService;
+            _colaboradorService = colaboradorService;
+            _logger = logger;
         }
 
-        // GET: api/Colaboradores
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Colaborador>>> GetColaboradores()
+        public async Task<ActionResult<IEnumerable<ColaboradorResponseDto>>> GetColaboradores()
         {
-            return await _context.Colaboradores
-                                  .Include(c => c.Departamento)
-                                  .Include(c => c.Funcao)
-                                  .ToListAsync();
+            var colaboradores = await _colaboradorService.GetAllColaboradoresAsync();
+            return Ok(colaboradores);
         }
 
-        // GET: api/Colaboradores/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Colaborador>> GetColaborador(int id)
+        public async Task<ActionResult<ColaboradorResponseDto>> GetColaborador(int id)
         {
-            var colaborador = await _context.Colaboradores
-                                            .Include(c => c.Departamento)
-                                            .Include(c => c.Funcao)
-                                            .FirstOrDefaultAsync(c => c.Id == id);
-
+            var colaborador = await _colaboradorService.GetColaboradorByIdAsync(id);
             if (colaborador == null)
             {
                 return NotFound();
             }
-
-            return colaborador;
+            return Ok(colaborador);
         }
 
-        // POST: api/Colaboradores
         [HttpPost]
-        public async Task<ActionResult<Colaborador>> PostColaborador([FromForm] ColaboradorDto colaboradorDto)
+        public async Task<ActionResult<ColaboradorResponseDto>> PostColaborador([FromForm] CreateColaboradorDto colaboradorDto, IFormFile imagem)
         {
-            if (!ModelState.IsValid)
+            // --- INÍCIO DOS LOGS ---
+            _logger.LogInformation("--- INICIANDO CADASTRO DE COLABORADOR ---");
+
+            // 1. Verifica se o token de autorização foi recebido
+            if (Request.Headers.ContainsKey("Authorization"))
             {
-                return BadRequest(ModelState);
-            }
-
-            var personId = await _faceApiService.CreatePersonAsync(colaboradorDto.Nome);
-            if (personId == null)
-            {
-                return BadRequest("Não foi possível criar a identidade do colaborador no serviço de reconhecimento facial.");
-            }
-
-            var colaborador = new Colaborador
-            {
-                Nome = colaboradorDto.Nome,
-                CartaoPonto = colaboradorDto.CartaoPonto,
-                DepartamentoId = colaboradorDto.DepartamentoId,
-                FuncaoId = colaboradorDto.FuncaoId,
-                AzurePersonId = personId.Value
-            };
-
-            if (colaboradorDto.FotoFile != null && colaboradorDto.FotoFile.Length > 0)
-            {
-                using var memoryStream = new MemoryStream();
-                await colaboradorDto.FotoFile.CopyToAsync(memoryStream);
-                var imageBytes = memoryStream.ToArray();
-
-                colaborador.Foto = imageBytes;
-
-                var persistedFace = await _faceApiService.AddFaceToPersonAsync(personId.Value, imageBytes);
-                if (persistedFace == null)
-                {
-                    return BadRequest("Uma face válida não foi detectada na imagem. O colaborador não foi criado.");
-                }
+                _logger.LogInformation("Cabeçalho de autorização recebido: {AuthorizationHeader}", Request.Headers["Authorization"]);
             }
             else
             {
-                return BadRequest("É obrigatório o envio de uma foto para o cadastro.");
+                _logger.LogWarning("NENHUM CABEÇALHO DE AUTORIZAÇÃO FOI RECEBIDO NA REQUISIÇÃO.");
+                return Unauthorized("Cabeçalho de autorização ausente.");
             }
 
-            _context.Colaboradores.Add(colaborador);
-            await _context.SaveChangesAsync();
+            // 2. Log dos dados recebidos
+            _logger.LogInformation("Dados recebidos do formulário: Nome={Nome}, CartaoPonto={CartaoPonto}, FuncaoId={FuncaoId}, DepartamentoId={DepartamentoId}",
+                colaboradorDto.Nome, colaboradorDto.CartaoPonto, colaboradorDto.FuncaoId, colaboradorDto.DepartamentoId);
 
-            await _faceApiService.TrainPersonGroupAsync();
-
-            return CreatedAtAction("GetColaborador", new { id = colaborador.Id }, colaborador);
-        }
-
-        // PUT: api/Colaboradores/5
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutColaborador(int id, [FromBody] ColaboradorUpdateDto colaboradorDto)
-        {
-            var colaborador = await _context.Colaboradores.FindAsync(id);
-
-            if (colaborador == null)
+            if (imagem == null || imagem.Length == 0)
             {
-                return NotFound();
+                _logger.LogError("Erro de validação: A imagem do colaborador é obrigatória e não foi enviada.");
+                return BadRequest("A imagem do colaborador é obrigatória.");
             }
-
-            colaborador.Nome = colaboradorDto.Nome;
-            colaborador.CartaoPonto = colaboradorDto.CartaoPonto;
-            colaborador.DepartamentoId = colaboradorDto.DepartamentoId;
-            colaborador.FuncaoId = colaboradorDto.FuncaoId;
-
-            _context.Entry(colaborador).State = EntityState.Modified;
+            _logger.LogInformation("Imagem recebida: FileName={FileName}, ContentType={ContentType}, Length={Length} bytes",
+                imagem.FileName, imagem.ContentType, imagem.Length);
+            // --- FIM DOS LOGS ---
 
             try
             {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!ColaboradorExists(id))
+                using (var stream = imagem.OpenReadStream())
                 {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
+                    _logger.LogInformation("Chamando o serviço IColaboradorService para criar o colaborador...");
+                    var novoColaborador = await _colaboradorService.CreateColaboradorAsync(colaboradorDto, stream);
+                    _logger.LogInformation("Colaborador criado com sucesso no serviço. Id={Id}", novoColaborador.Id);
+                    return CreatedAtAction(nameof(GetColaborador), new { id = novoColaborador.Id }, novoColaborador);
                 }
             }
-
-            return NoContent();
+            catch (Exception ex)
+            {
+                // Captura e loga QUALQUER erro que aconteça na camada de serviço ou no banco de dados
+                _logger.LogError(ex, "Uma exceção ocorreu ao tentar salvar o colaborador. Mensagem: {ErrorMessage}", ex.Message);
+                return StatusCode(500, $"Erro interno ao criar colaborador. Verifique os logs da API para mais detalhes.");
+            }
         }
-
-        // PUT: api/Colaboradores/5/foto
-        [HttpPut("{id}/foto")]
-        public async Task<IActionResult> PutColaboradorFoto(int id, IFormFile fotoFile)
-        {
-            var colaborador = await _context.Colaboradores.FindAsync(id);
-            if (colaborador == null)
-            {
-                return NotFound("Colaborador não encontrado.");
-            }
-
-            if (colaborador.AzurePersonId == null)
-            {
-                return BadRequest("Este colaborador não possui uma identidade de reconhecimento facial. Crie um novo registo para ele.");
-            }
-
-            if (fotoFile == null || fotoFile.Length == 0)
-            {
-                return BadRequest("Nenhuma foto foi enviada.");
-            }
-
-            using var memoryStream = new MemoryStream();
-            await fotoFile.CopyToAsync(memoryStream);
-            var imageBytes = memoryStream.ToArray();
-
-            var persistedFace = await _faceApiService.AddFaceToPersonAsync(colaborador.AzurePersonId.Value, imageBytes);
-
-            if (persistedFace == null)
-            {
-                return BadRequest("Não foi possível detectar um rosto na imagem enviada. A foto não foi atualizada.");
-            }
-
-            colaborador.Foto = imageBytes;
-            _context.Entry(colaborador).State = EntityState.Modified;
-            await _context.SaveChangesAsync();
-
-            await _faceApiService.TrainPersonGroupAsync();
-
-            return Ok(new { message = "Foto do colaborador atualizada com sucesso." });
-        }
-
-        // DELETE: api/Colaboradores/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteColaborador(int id)
-        {
-            var colaborador = await _context.Colaboradores.FindAsync(id);
-            if (colaborador == null)
-            {
-                return NotFound();
-            }
-
-            _context.Colaboradores.Remove(colaborador);
-            await _context.SaveChangesAsync();
-
-            await _faceApiService.TrainPersonGroupAsync();
-
-            return NoContent();
-        }
-
-        private bool ColaboradorExists(int id)
-        {
-            return _context.Colaboradores.Any(e => e.Id == id);
-        }
-    }
-
-    public class ColaboradorDto
-    {
-        public string Nome { get; set; }
-        public string CartaoPonto { get; set; }
-        public int DepartamentoId { get; set; }
-        public int FuncaoId { get; set; }
-        public IFormFile? FotoFile { get; set; }
-    }
-
-    public class ColaboradorUpdateDto
-    {
-        public string Nome { get; set; }
-        public string CartaoPonto { get; set; }
-        public int DepartamentoId { get; set; }
-        public int FuncaoId { get; set; }
     }
 }

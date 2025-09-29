@@ -1,33 +1,40 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Portal_Refeicoes.Services;
+using System;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- ETAPA 1: Adicionar todos os serviços ANTES do builder.Build() ---
-
+// Adicionar serviços ao contêiner.
 builder.Services.AddRazorPages();
 
-// Configuração do HttpClient para se comunicar com a API
-builder.Services.AddHttpClient("ApiClient", (serviceProvider, client) =>
+// Configurar sessão
+builder.Services.AddSession(options =>
 {
-    var settings = serviceProvider.GetRequiredService<IConfiguration>();
-    client.BaseAddress = new Uri(settings.GetValue<string>("ApiSettings:BaseUrl"));
+    options.IdleTimeout = TimeSpan.FromMinutes(30);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
 });
 
-// Configuração de Autenticação por Cookies para o Login no Portal
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme) // CORREÇÃO APLICADA AQUI
+// Configurar autenticação por Cookies para o Portal
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
         options.LoginPath = "/Login";
+        options.LogoutPath = "/Logout";
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
     });
 
+// Configurar o HttpClient e o ApiClient
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient<ApiClient>(client =>
+{
+    // CORREÇÃO: Lê a chave aninhada "ApiSettings:ApiBaseUrl"
+    client.BaseAddress = new Uri(builder.Configuration["ApiSettings:ApiBaseUrl"]);
+});
 
-// --- ETAPA 2: Construir a aplicação ---
 var app = builder.Build();
 
-
-// --- ETAPA 3: Configurar o pipeline DEPOIS do builder.Build() ---
-
+// Configurar o pipeline de requisições HTTP.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
@@ -39,9 +46,13 @@ app.UseStaticFiles();
 
 app.UseRouting();
 
+// Habilitar sessão
+app.UseSession();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapRazorPages();
+// Exige autorização para todas as páginas, exceto as marcadas com [AllowAnonymous]
+app.MapRazorPages().RequireAuthorization();
 
 app.Run();

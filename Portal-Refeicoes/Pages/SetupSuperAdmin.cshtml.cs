@@ -1,33 +1,37 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Portal_Refeicoes.Services;
 using System.ComponentModel.DataAnnotations;
+using System.Threading.Tasks;
 
 namespace Portal_Refeicoes.Pages
 {
+    [AllowAnonymous]
     public class SetupSuperAdminModel : PageModel
     {
-        private readonly IHttpClientFactory _clientFactory;
+        private readonly ApiClient _apiClient;
 
-        public SetupSuperAdminModel(IHttpClientFactory clientFactory)
+        public SetupSuperAdminModel(ApiClient apiClient)
         {
-            _clientFactory = clientFactory;
+            _apiClient = apiClient;
         }
 
         [BindProperty]
         public InputModel Input { get; set; }
 
-        public string? SuccessMessage { get; set; }
-        public string? ErrorMessage { get; set; }
+        public string SuccessMessage { get; set; }
+        public string ErrorMessage { get; set; }
 
         public class InputModel
         {
-            [Required]
-            public string Nome { get; set; }
-            [Required]
-            [EmailAddress]
-            public string Email { get; set; }
-            [Required]
+            [Required(ErrorMessage = "O nome de usuário é obrigatório.")]
+            [Display(Name = "Nome de Usuário")]
+            public string Username { get; set; }
+
+            [Required(ErrorMessage = "A senha é obrigatória.")]
             [DataType(DataType.Password)]
+            [MinLength(6, ErrorMessage = "A senha deve ter no mínimo 6 caracteres.")]
             public string Senha { get; set; }
         }
 
@@ -42,26 +46,17 @@ namespace Portal_Refeicoes.Pages
                 return Page();
             }
 
-            var client = _clientFactory.CreateClient("ApiClient");
+            var success = await _apiClient.CreateSuperAdminAsync(Input.Username, Input.Senha);
 
-            using var content = new MultipartFormDataContent();
-            content.Add(new StringContent(Input.Nome), "Nome");
-            content.Add(new StringContent(Input.Email), "Email");
-            content.Add(new StringContent(Input.Senha), "Senha");
-            content.Add(new StringContent("SuperAdmin"), "Role"); // Hardcoded para garantir que seja SuperAdmin
-
-            var response = await client.PostAsync("/api/usuarios", content);
-
-            if (response.IsSuccessStatusCode)
+            if (success)
             {
-                SuccessMessage = "Usuário SuperAdmin criado com sucesso! Agora você pode fazer login.";
+                SuccessMessage = "Usuário SuperAdmin criado com sucesso! Agora você pode fazer o login.";
                 ModelState.Clear(); // Limpa o formulário
                 return Page();
             }
             else
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                ErrorMessage = $"Falha ao criar usuário. A API respondeu com: {response.StatusCode}. Detalhes: {errorContent}";
+                ErrorMessage = "Não foi possível criar o usuário. Um SuperAdmin já pode existir ou a API está indisponível.";
                 return Page();
             }
         }

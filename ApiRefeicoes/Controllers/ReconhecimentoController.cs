@@ -1,46 +1,84 @@
-﻿using ApiRefeicoes.Services;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
+using ApiRefeicoes.Services;
+using ApiRefeicoes.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using ApiRefeicoes.Models;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using System.IO;
+using System;
+using Microsoft.Extensions.Logging;
 
 namespace ApiRefeicoes.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class ReconhecimentoController : ControllerBase
     {
         private readonly FaceApiService _faceApiService;
+        private readonly ApiRefeicoesDbContext _context;
+        private readonly ILogger<ReconhecimentoController> _logger;
 
-        public ReconhecimentoController(FaceApiService faceApiService)
+        public ReconhecimentoController(FaceApiService faceApiService, ApiRefeicoesDbContext context, ILogger<ReconhecimentoController> logger)
         {
             _faceApiService = faceApiService;
+            _context = context;
+            _logger = logger;
         }
 
-        [HttpPost("verify")]
-        public async Task<IActionResult> VerifyFaces([FromForm] IFormFile file1, [FromForm] IFormFile file2)
+        [HttpPost("identificar")]
+        public async Task<IActionResult> Identificar([FromForm] IFormFile file)
         {
-            if (file1 == null || file2 == null)
+            if (file == null || file.Length == 0)
             {
-                return BadRequest("Duas imagens são necessárias.");
+                return BadRequest(new { Sucesso = false, Mensagem = "Nenhuma imagem foi enviada." });
             }
 
-            using var memoryStream1 = new MemoryStream();
-            await file1.CopyToAsync(memoryStream1);
-            var imageBytes1 = memoryStream1.ToArray();
+            _logger.LogInformation("Requisição de identificação recebida.");
 
-            using var memoryStream2 = new MemoryStream();
-            await file2.CopyToAsync(memoryStream2);
-            var imageBytes2 = memoryStream2.ToArray();
-
-            var faceId1 = await _faceApiService.DetectFace(imageBytes1);
-            var faceId2 = await _faceApiService.DetectFace(imageBytes2);
-
-            if (faceId1 == null || faceId2 == null)
+            Guid? faceId;
+            using (var memoryStream = new MemoryStream())
             {
-                return BadRequest("Não foi possível detectar faces em uma ou ambas as imagens.");
+                await file.CopyToAsync(memoryStream);
+                memoryStream.Position = 0; // Reseta a posição do stream para o início
+                faceId = await _faceApiService.DetectFace(memoryStream);
             }
 
-            var (isIdentical, confidence) = await _faceApiService.VerifyFaces(faceId1.Value, faceId2.Value);
+            if (faceId == null)
+            {
+                return Ok(new { Sucesso = false, Mensagem = "Não foi possível detetar um rosto na imagem enviada." });
+            }
 
-            return Ok(new { isIdentical, confidence });
+            // Método correto e performático para identificação
+            var personId = await _faceApiService.IdentifyFaceAsync(faceId.Value);
+
+            if (personId == null)
+            {
+                _logger.LogWarning("Falha na identificação: Nenhum colaborador correspondente foi encontrado.");
+                return Ok(new { Sucesso = false, Mensagem = "Rosto não reconhecido." });
+            }
+
+            var colaborador = await _context.Colaboradores.FirstOrDefaultAsync(c => c.PersonId == personId.Value);
+
+            if (colaborador == null)
+            {
+                _logger.LogError("INCONSISTÊNCIA DE DADOS: PersonId {PersonId} retornado pelo Azure mas não encontrado no banco de dados.", personId.Value);
+                return StatusCode(500, new { Sucesso = false, Mensagem = "Erro de consistência nos dados. Contate o administrador." });
+            }
+
+            _logger.LogInformation("SUCESSO: Colaborador {Nome} identificado.", colaborador.Nome);
+
+            // Aqui você pode adicionar a lógica para registrar a refeição, se necessário.
+
+            return Ok(new
+            {
+                Sucesso = true,
+                Nome = colaborador.Nome,
+                FotoBase64 = colaborador.Foto != null ? Convert.ToBase64String(colaborador.Foto) : null,
+                Mensagem = "Bem-vindo(a)!"
+            });
         }
     }
 }

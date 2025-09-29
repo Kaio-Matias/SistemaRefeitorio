@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ApiRefeicoes.Migrations
 {
     [DbContext(typeof(ApiRefeicoesDbContext))]
-    [Migration("20250919155428_MIgracaoInicial")]
-    partial class MIgracaoInicial
+    [Migration("20250929141646_MigracaoInicial]")]
+    partial class MigracaoInicial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -25,6 +25,31 @@ namespace ApiRefeicoes.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("ApiRefeicoes.Models.Cardapio", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CaminhoArquivo")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("DataUpload")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("NomeArquivo")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Cardapios");
+                });
+
             modelBuilder.Entity("ApiRefeicoes.Models.Colaborador", b =>
                 {
                     b.Property<int>("Id")
@@ -33,8 +58,8 @@ namespace ApiRefeicoes.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("AzureId")
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<bool>("Ativo")
+                        .HasColumnType("bit");
 
                     b.Property<string>("CartaoPonto")
                         .IsRequired()
@@ -46,12 +71,18 @@ namespace ApiRefeicoes.Migrations
                     b.Property<byte[]>("Foto")
                         .HasColumnType("varbinary(max)");
 
+                    b.Property<string>("FotoBase64")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("FuncaoId")
                         .HasColumnType("int");
 
                     b.Property<string>("Nome")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("PersonId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
 
@@ -69,6 +100,9 @@ namespace ApiRefeicoes.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("DepartamentoGenerico")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Nome")
                         .HasColumnType("nvarchar(max)");
@@ -88,7 +122,7 @@ namespace ApiRefeicoes.Migrations
 
                     b.Property<string>("DeviceIdentifier")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsAtivo")
                         .HasColumnType("bit");
@@ -105,8 +139,7 @@ namespace ApiRefeicoes.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UsuarioId", "DeviceIdentifier")
-                        .IsUnique();
+                    b.HasIndex("UsuarioId");
 
                     b.ToTable("Dispositivos");
                 });
@@ -138,12 +171,14 @@ namespace ApiRefeicoes.Migrations
                     b.Property<int>("ColaboradorId")
                         .HasColumnType("int");
 
-                    b.Property<string>("Dispositivo")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("HorarioRegistro")
+                    b.Property<DateTime>("DataHoraRegistro")
                         .HasColumnType("datetime2");
+
+                    b.Property<bool>("ParadaDeFabrica")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("TipoRefeicao")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("ValorRefeicao")
                         .HasColumnType("decimal(18, 2)");
@@ -152,7 +187,7 @@ namespace ApiRefeicoes.Migrations
 
                     b.HasIndex("ColaboradorId");
 
-                    b.ToTable("RegistrosRefeicoes");
+                    b.ToTable("RegistroRefeicoes");
                 });
 
             modelBuilder.Entity("ApiRefeicoes.Models.Usuario", b =>
@@ -163,11 +198,7 @@ namespace ApiRefeicoes.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Nome")
+                    b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
@@ -175,7 +206,7 @@ namespace ApiRefeicoes.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("SenhaHash")
+                    b.Property<string>("Username")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 

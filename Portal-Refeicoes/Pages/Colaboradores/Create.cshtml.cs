@@ -1,116 +1,76 @@
-using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Portal_Refeicoes.Models;
-using System.ComponentModel.DataAnnotations;
-using System.Text.Json;
+using Portal_Refeicoes.Services;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Portal_Refeicoes.Pages.Colaboradores
 {
-    [Authorize]
     public class CreateModel : PageModel
     {
-        private readonly IHttpClientFactory _clientFactory;
+        private readonly ApiClient _apiClient;
 
-        public CreateModel(IHttpClientFactory clientFactory)
+        public CreateModel(ApiClient apiClient)
         {
-            _clientFactory = clientFactory;
+            _apiClient = apiClient;
         }
 
         [BindProperty]
-        public ColaboradorViewModel ColaboradorInput { get; set; }
+        public ColaboradorCreateModel Colaborador { get; set; }
 
-        // Propriedades para carregar os dropdowns
+        [BindProperty]
+        public IFormFile Imagem { get; set; }
+
         public SelectList Departamentos { get; set; }
         public SelectList Funcoes { get; set; }
 
         public async Task<IActionResult> OnGetAsync()
         {
-            await LoadDropdowns();
+            await PopulateDropdowns();
             return Page();
         }
 
         public async Task<IActionResult> OnPostAsync()
         {
+            // --- Validação do tipo de arquivo ---
+            if (Imagem != null)
+            {
+                var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif" };
+                var extension = Path.GetExtension(Imagem.FileName).ToLowerInvariant();
+                if (!allowedExtensions.Contains(extension))
+                {
+                    ModelState.AddModelError("Imagem", "Por favor, envie um arquivo de imagem válido (JPG, PNG, GIF).");
+                }
+            }
+
             if (!ModelState.IsValid)
             {
-                await LoadDropdowns();
+                await PopulateDropdowns();
                 return Page();
             }
 
-            var client = _clientFactory.CreateClient("ApiClient");
-            var token = User.FindFirst("access_token")?.Value;
-            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            var success = await _apiClient.CreateColaboradorAsync(Colaborador, Imagem);
 
-            using var content = new MultipartFormDataContent();
-            content.Add(new StringContent(ColaboradorInput.Nome), "Nome");
-            content.Add(new StringContent(ColaboradorInput.CartaoPonto), "CartaoPonto");
-            content.Add(new StringContent(ColaboradorInput.DepartamentoId.ToString()), "DepartamentoId");
-            content.Add(new StringContent(ColaboradorInput.FuncaoId.ToString()), "FuncaoId");
-
-            if (ColaboradorInput.FotoFile != null)
-            {
-                var streamContent = new StreamContent(ColaboradorInput.FotoFile.OpenReadStream());
-                content.Add(streamContent, "FotoFile", ColaboradorInput.FotoFile.FileName);
-            }
-
-            var response = await client.PostAsync("/api/colaboradores", content);
-
-            if (response.IsSuccessStatusCode)
+            if (success)
             {
                 return RedirectToPage("./Index");
             }
-            else
-            {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                ModelState.AddModelError(string.Empty, $"Erro da API: {errorContent}");
-                await LoadDropdowns();
-                return Page();
-            }
+
+            ModelState.AddModelError(string.Empty, "Ocorreu um erro ao salvar o colaborador. Verifique os dados e tente novamente.");
+            await PopulateDropdowns();
+            return Page();
         }
 
-        private async Task LoadDropdowns()
+        private async Task PopulateDropdowns()
         {
-            var client = _clientFactory.CreateClient("ApiClient");
-            var token = User.FindFirst("access_token")?.Value;
-            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-
-            // Carregar Departamentos
-            var deptResponse = await client.GetAsync("/api/departamentos");
-            if (deptResponse.IsSuccessStatusCode)
-            {
-                var deptStream = await deptResponse.Content.ReadAsStreamAsync();
-                var deptList = await JsonSerializer.DeserializeAsync<List<Departamento>>(deptStream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                Departamentos = new SelectList(deptList, "Id", "Nome");
-            }
-
-            // Carregar Funções
-            var funcResponse = await client.GetAsync("/api/funcoes");
-            if (funcResponse.IsSuccessStatusCode)
-            {
-                var funcStream = await funcResponse.Content.ReadAsStreamAsync();
-                var funcList = await JsonSerializer.DeserializeAsync<List<Funcao>>(funcStream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                Funcoes = new SelectList(funcList, "Id", "Nome");
-            }
+            var departamentos = await _apiClient.GetDepartamentosAsync();
+            var funcoes = await _apiClient.GetFuncoesAsync();
+            Departamentos = new SelectList(departamentos, "Id", "Nome");
+            Funcoes = new SelectList(funcoes, "Id", "Nome");
         }
-    }
-
-    // ViewModel para o formulário, para lidar com o IFormFile
-    public class ColaboradorViewModel
-    {
-        [Required]
-        public string Nome { get; set; }
-        [Required]
-        [Display(Name = "Cartão de Ponto")]
-        public string CartaoPonto { get; set; }
-        [Required]
-        [Display(Name = "Departamento")]
-        public int DepartamentoId { get; set; }
-        [Required]
-        [Display(Name = "Função")]
-        public int FuncaoId { get; set; }
-        [Display(Name = "Foto do Colaborador")]
-        public IFormFile? FotoFile { get; set; }
     }
 }
