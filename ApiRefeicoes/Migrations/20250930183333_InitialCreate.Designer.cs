@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ApiRefeicoes.Migrations
 {
     [DbContext(typeof(ApiRefeicoesDbContext))]
-    [Migration("20250929141646_MigracaoInicial]")]
-    partial class MigracaoInicial
+    [Migration("20250930183333_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -63,7 +63,8 @@ namespace ApiRefeicoes.Migrations
 
                     b.Property<string>("CartaoPonto")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<int>("DepartamentoId")
                         .HasColumnType("int");
@@ -71,15 +72,13 @@ namespace ApiRefeicoes.Migrations
                     b.Property<byte[]>("Foto")
                         .HasColumnType("varbinary(max)");
 
-                    b.Property<string>("FotoBase64")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<int>("FuncaoId")
                         .HasColumnType("int");
 
                     b.Property<string>("Nome")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<Guid?>("PersonId")
                         .HasColumnType("uniqueidentifier");
@@ -105,7 +104,9 @@ namespace ApiRefeicoes.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Nome")
-                        .HasColumnType("nvarchar(max)");
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.HasKey("Id");
 
@@ -153,11 +154,37 @@ namespace ApiRefeicoes.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Nome")
-                        .HasColumnType("nvarchar(max)");
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.HasKey("Id");
 
                     b.ToTable("Funcoes");
+                });
+
+            modelBuilder.Entity("ApiRefeicoes.Models.ParadaDeFabrica", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("DataParada")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool?>("Parada")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("UsuarioId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("ParadasDeFabrica");
                 });
 
             modelBuilder.Entity("ApiRefeicoes.Models.RegistroRefeicao", b =>
@@ -181,7 +208,7 @@ namespace ApiRefeicoes.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("ValorRefeicao")
-                        .HasColumnType("decimal(18, 2)");
+                        .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
 
@@ -218,13 +245,13 @@ namespace ApiRefeicoes.Migrations
             modelBuilder.Entity("ApiRefeicoes.Models.Colaborador", b =>
                 {
                     b.HasOne("ApiRefeicoes.Models.Departamento", "Departamento")
-                        .WithMany()
+                        .WithMany("Colaboradores")
                         .HasForeignKey("DepartamentoId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("ApiRefeicoes.Models.Funcao", "Funcao")
-                        .WithMany()
+                        .WithMany("Colaboradores")
                         .HasForeignKey("FuncaoId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -245,15 +272,39 @@ namespace ApiRefeicoes.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("ApiRefeicoes.Models.ParadaDeFabrica", b =>
+                {
+                    b.HasOne("ApiRefeicoes.Models.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId");
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("ApiRefeicoes.Models.RegistroRefeicao", b =>
                 {
                     b.HasOne("ApiRefeicoes.Models.Colaborador", "Colaborador")
-                        .WithMany()
+                        .WithMany("RegistrosRefeicoes")
                         .HasForeignKey("ColaboradorId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Colaborador");
+                });
+
+            modelBuilder.Entity("ApiRefeicoes.Models.Colaborador", b =>
+                {
+                    b.Navigation("RegistrosRefeicoes");
+                });
+
+            modelBuilder.Entity("ApiRefeicoes.Models.Departamento", b =>
+                {
+                    b.Navigation("Colaboradores");
+                });
+
+            modelBuilder.Entity("ApiRefeicoes.Models.Funcao", b =>
+                {
+                    b.Navigation("Colaboradores");
                 });
 
             modelBuilder.Entity("ApiRefeicoes.Models.Usuario", b =>

@@ -9,9 +9,9 @@ namespace ApiRefeicoes.Models
 
         [Required]
         [StringLength(100)]
-        public string Nome { get; set; }
+        public string? Nome { get; set; }
 
-        public bool DepartamentoGenerico { get; set; }
+        public string? DepartamentoGenerico { get; set; }
 
         // --- INÍCIO DA CORREÇÃO (CS1061) ---
         // Propriedade de navegação para EF Core entender o relacionamento

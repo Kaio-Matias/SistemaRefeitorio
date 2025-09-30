@@ -21,7 +21,6 @@ namespace ApiRefeicoes.Services
             _faceApiService = faceApiService;
         }
 
-        // --- MÉTODO CREATE REINSERIDO PARA CORRIGIR ERRO CS0535 ---
         public async Task<ColaboradorResponseDto> CreateColaboradorAsync(CreateColaboradorDto colaboradorDto, Stream imagemStream)
         {
             var colaborador = new Colaborador
@@ -51,7 +50,6 @@ namespace ApiRefeicoes.Services
             return await GetColaboradorByIdAsync(colaborador.Id);
         }
 
-        // --- MÉTODO UPDATE CORRIGIDO ---
         public async Task<ColaboradorResponseDto?> UpdateColaboradorAsync(int id, UpdateColaboradorDto colaboradorDto, Stream? imagemStream)
         {
             var colaborador = await _context.Colaboradores.FindAsync(id);
@@ -59,7 +57,6 @@ namespace ApiRefeicoes.Services
 
             if (imagemStream != null)
             {
-                // CORREÇÃO (CS1503): Verifica se o PersonId existe antes de usar
                 if (colaborador.PersonId.HasValue)
                 {
                     await _faceApiService.DeletePersonAsync(colaborador.PersonId.Value);
@@ -82,7 +79,7 @@ namespace ApiRefeicoes.Services
             colaborador.CartaoPonto = colaboradorDto.CartaoPonto;
             colaborador.FuncaoId = colaboradorDto.FuncaoId;
             colaborador.DepartamentoId = colaboradorDto.DepartamentoId;
-            colaborador.Ativo = colaboradorDto.Ativo;
+            colaborador.Ativo = colaboradorDto.Ativo; // Atribui para a propriedade bool, que fará a conversão para o AtivoStorage
 
             _context.Colaboradores.Update(colaborador);
             await _context.SaveChangesAsync();
@@ -102,7 +99,7 @@ namespace ApiRefeicoes.Services
                     CartaoPonto = c.CartaoPonto,
                     Funcao = c.Funcao.Nome,
                     Departamento = c.Departamento.Nome,
-                    Ativo = c.Ativo,
+                    Ativo = c.Ativo, // Usa a propriedade booleana 'Ativo'
                     Foto = c.Foto,
                     FuncaoId = c.FuncaoId,
                     DepartamentoId = c.DepartamentoId
@@ -125,7 +122,7 @@ namespace ApiRefeicoes.Services
                 CartaoPonto = colaborador.CartaoPonto,
                 Funcao = colaborador.Funcao.Nome,
                 Departamento = colaborador.Departamento.Nome,
-                Ativo = colaborador.Ativo,
+                Ativo = colaborador.Ativo, // Usa a propriedade booleana 'Ativo'
                 Foto = colaborador.Foto,
                 FuncaoId = colaborador.FuncaoId,
                 DepartamentoId = colaborador.DepartamentoId

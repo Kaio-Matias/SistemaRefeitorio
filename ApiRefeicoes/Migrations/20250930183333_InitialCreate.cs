@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace ApiRefeicoes.Migrations
 {
     /// <inheritdoc />
-    public partial class MigracaoInicial : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -32,7 +32,7 @@ namespace ApiRefeicoes.Migrations
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    Nome = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    Nome = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
                     DepartamentoGenerico = table.Column<string>(type: "nvarchar(max)", nullable: true)
                 },
                 constraints: table =>
@@ -46,7 +46,7 @@ namespace ApiRefeicoes.Migrations
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    Nome = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    Nome = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -74,14 +74,13 @@ namespace ApiRefeicoes.Migrations
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    CartaoPonto = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Nome = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Nome = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    CartaoPonto = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
                     Foto = table.Column<byte[]>(type: "varbinary(max)", nullable: true),
-                    PersonId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    FotoBase64 = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    DepartamentoId = table.Column<int>(type: "int", nullable: false),
                     FuncaoId = table.Column<int>(type: "int", nullable: false),
-                    Ativo = table.Column<bool>(type: "bit", nullable: false)
+                    DepartamentoId = table.Column<int>(type: "int", nullable: false),
+                    Ativo = table.Column<bool>(type: "bit", nullable: false),
+                    PersonId = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -124,6 +123,26 @@ namespace ApiRefeicoes.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "ParadasDeFabrica",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Parada = table.Column<bool>(type: "bit", nullable: true),
+                    DataParada = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UsuarioId = table.Column<int>(type: "int", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ParadasDeFabrica", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ParadasDeFabrica_Usuarios_UsuarioId",
+                        column: x => x.UsuarioId,
+                        principalTable: "Usuarios",
+                        principalColumn: "Id");
+                });
+
+            migrationBuilder.CreateTable(
                 name: "RegistroRefeicoes",
                 columns: table => new
                 {
@@ -162,6 +181,11 @@ namespace ApiRefeicoes.Migrations
                 column: "UsuarioId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_ParadasDeFabrica_UsuarioId",
+                table: "ParadasDeFabrica",
+                column: "UsuarioId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_RegistroRefeicoes_ColaboradorId",
                 table: "RegistroRefeicoes",
                 column: "ColaboradorId");
@@ -175,6 +199,9 @@ namespace ApiRefeicoes.Migrations
 
             migrationBuilder.DropTable(
                 name: "Dispositivos");
+
+            migrationBuilder.DropTable(
+                name: "ParadasDeFabrica");
 
             migrationBuilder.DropTable(
                 name: "RegistroRefeicoes");

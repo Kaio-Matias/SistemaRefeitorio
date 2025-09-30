@@ -28,7 +28,6 @@ namespace ApiRefeicoes.Models
 
         public Guid? PersonId { get; set; }
 
-        // --- GARANTIR QUE ESTA PROPRIEDADE EXISTA ---
         public virtual ICollection<RegistroRefeicao> RegistrosRefeicoes { get; set; } = new List<RegistroRefeicao>();
     }
 }
