@@ -1,10 +1,8 @@
-﻿using ApiRefeicoes.Data;
-using ApiRefeicoes.Models;
-using ApiRefeicoes.Services;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System.Threading.Tasks;
+using ApiRefeicoes.Services;
+using ApiRefeicoes.Models;
+using ApiRefeicoes.Data;
 
 namespace ApiRefeicoes.Controllers
 {
@@ -12,30 +10,38 @@ namespace ApiRefeicoes.Controllers
     [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
+        private readonly IConfiguration _configuration;
         private readonly ApiRefeicoesDbContext _context;
-        private readonly TokenService _tokenService;
 
-        public AuthController(ApiRefeicoesDbContext context, IConfiguration configuration)
+        public AuthController(IConfiguration configuration, ApiRefeicoesDbContext context)
         {
+            _configuration = configuration;
             _context = context;
-            _tokenService = new TokenService(configuration);
         }
 
-        [AllowAnonymous]
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginRequest model)
+        [AllowAnonymous]
+        public IActionResult Login([FromBody] LoginRequest loginRequest)
         {
-            // CORREÇÃO: Busca por 'Username' em vez de 'Email'
-            var usuario = await _context.Usuarios
-                                        .FirstOrDefaultAsync(u => u.Username == model.Username);
+            var user = _context.Usuarios.SingleOrDefault(u => u.Username == loginRequest.Username);
 
-            if (usuario == null || !BCrypt.Net.BCrypt.Verify(model.Password, usuario.PasswordHash))
+            if (user == null || !BCrypt.Net.BCrypt.Verify(loginRequest.Password, user.PasswordHash))
             {
-                return Unauthorized(new { message = "Usuário ou senha inválidos." });
+                return Unauthorized(new { message = "Utilizador ou senha inválidos." });
             }
 
-            var token = _tokenService.GenerateToken(usuario);
+            // CORREÇÃO: A chamada ao GenerateToken deve passar o objeto de configuração inteiro,
+            // pois o TokenService está desenhado para extrair os valores de dentro dele.
+            var token = TokenService.GenerateToken(user, _configuration);
+
             return Ok(new { token });
+        }
+
+        [HttpGet("validate-token")]
+        [Authorize]
+        public IActionResult ValidateToken()
+        {
+            return Ok();
         }
     }
 
