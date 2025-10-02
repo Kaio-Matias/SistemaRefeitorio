@@ -98,7 +98,8 @@ namespace ApiRefeicoes.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("DepartamentoGenerico")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("Nome")
                         .IsRequired()
@@ -198,11 +199,32 @@ namespace ApiRefeicoes.Migrations
                     b.Property<DateTime>("DataHoraRegistro")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("DepartamentoGenerico")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("NomeColaborador")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("NomeDepartamento")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("NomeFuncao")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<bool>("ParadaDeFabrica")
                         .HasColumnType("bit");
 
                     b.Property<string>("TipoRefeicao")
-                        .HasColumnType("nvarchar(max)");
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<decimal>("ValorRefeicao")
                         .HasColumnType("decimal(18,2)");

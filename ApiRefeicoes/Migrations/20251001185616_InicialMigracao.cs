@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace ApiRefeicoes.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class InicialMigracao : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -33,7 +33,7 @@ namespace ApiRefeicoes.Migrations
                     Id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     Nome = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    DepartamentoGenerico = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    DepartamentoGenerico = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -150,7 +150,11 @@ namespace ApiRefeicoes.Migrations
                         .Annotation("SqlServer:Identity", "1, 1"),
                     ColaboradorId = table.Column<int>(type: "int", nullable: false),
                     DataHoraRegistro = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    TipoRefeicao = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    TipoRefeicao = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    NomeColaborador = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    NomeDepartamento = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    DepartamentoGenerico = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
+                    NomeFuncao = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
                     ValorRefeicao = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
                     ParadaDeFabrica = table.Column<bool>(type: "bit", nullable: false)
                 },

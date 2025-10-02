@@ -37,8 +37,8 @@ namespace ApiRefeicoes.Controllers
             await file2.CopyToAsync(memoryStream2);
             var imageBytes2 = memoryStream2.ToArray();
 
-            var faceId1Str = await _faceApiService.DetectFaceAndGetId(imageBytes1);
-            var faceId2Str = await _faceApiService.DetectFaceAndGetId(imageBytes2);
+            var faceId1Str = await _faceApiService.DetectFaceAndGetId(new MemoryStream(imageBytes1));
+            var faceId2Str = await _faceApiService.DetectFaceAndGetId(new MemoryStream(imageBytes2));
 
             if (string.IsNullOrEmpty(faceId1Str) || string.IsNullOrEmpty(faceId2Str))
             {

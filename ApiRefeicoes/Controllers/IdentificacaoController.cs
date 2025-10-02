@@ -2,8 +2,10 @@
 using ApiRefeicoes.Models;
 using ApiRefeicoes.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
@@ -27,6 +29,7 @@ namespace ApiRefeicoes.Controllers
         }
 
         [HttpPost("registrar-ponto")]
+        [AllowAnonymous]
         public async Task<IActionResult> RegistrarPonto([FromForm] IFormFile file)
         {
             if (file == null || file.Length == 0)
@@ -52,10 +55,13 @@ namespace ApiRefeicoes.Controllers
                 }
 
                 var colaborador = await _context.Colaboradores
+                    .Include(c => c.Departamento)
+                    .Include(c => c.Funcao)
                     .FirstOrDefaultAsync(c => c.PersonId == personIdIdentificado.Value);
 
                 if (colaborador == null)
                 {
+                    _logger.LogError("PersonId {personId} identificado, mas não encontrado no BD.", personIdIdentificado.Value);
                     return NotFound(new { Sucesso = false, Mensagem = "Colaborador não encontrado no banco de dados." });
                 }
 
@@ -71,18 +77,19 @@ namespace ApiRefeicoes.Controllers
                     return BadRequest(new { Sucesso = false, Mensagem = "Fora do horário de refeição." });
                 }
 
-                // --- INÍCIO DA CORREÇÃO ---
+                // Popula os novos campos, incluindo o DepartamentoGenerico
                 var registro = new RegistroRefeicao
                 {
                     ColaboradorId = colaborador.Id,
-                    // Corrigido para 'DataHoraRegistro' conforme o novo modelo (CS0117)
-                    DataHoraRegistro = DateTime.Now,
+                    DataHoraRegistro = DateTime.UtcNow,
                     TipoRefeicao = tipoRefeicao,
-                    // Valores padrão para os novos campos
+                    NomeColaborador = colaborador.Nome,
+                    NomeDepartamento = colaborador.Departamento?.Nome ?? "N/A",
+                    DepartamentoGenerico = colaborador.Departamento?.DepartamentoGenerico, // Adicionado
+                    NomeFuncao = colaborador.Funcao?.Nome ?? "N/A",
                     ValorRefeicao = 0,
                     ParadaDeFabrica = false
                 };
-                // --- FIM DA CORREÇÃO ---
 
                 _context.RegistroRefeicoes.Add(registro);
                 await _context.SaveChangesAsync();
@@ -99,14 +106,28 @@ namespace ApiRefeicoes.Controllers
 
         private string DeterminarTipoRefeicao()
         {
-            var horaAtual = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("E. South America Standard Time")).Hour;
+            try
+            {
+                var timeZone = TimeZoneInfo.FindSystemTimeZoneById("E. South America Standard Time");
+                var horaLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone).Hour;
 
-            if (horaAtual >= 6 && horaAtual < 8) return "Café da Manhã";
-            if (horaAtual >= 11 && horaAtual < 14) return "Almoço";
-            if (horaAtual >= 18 && horaAtual < 20) return "Janta";
-            if (horaAtual >= 22 && horaAtual < 24) return "Ceia";
+                if (horaLocal >= 6 && horaLocal < 8) return "Café da Manhã";
+                if (horaLocal >= 11 && horaLocal < 14) return "Almoço";
+                if (horaLocal >= 18 && horaLocal < 20) return "Janta";
+                if (horaLocal >= 22 || horaLocal < 1) return "Ceia";
 
-            return null;
+                return null;
+            }
+            catch (TimeZoneNotFoundException ex)
+            {
+                _logger.LogError(ex, "Fuso horário 'E. South America Standard Time' não encontrado. Usando UTC como fallback.");
+                var horaUtc = DateTime.UtcNow.Hour;
+
+                if (horaUtc >= 9 && horaUtc < 11) return "Café da Manhã";
+                if (horaUtc >= 14 && horaUtc < 17) return "Almoço";
+
+                return "Horário Indeterminado (UTC)";
+            }
         }
     }
 }

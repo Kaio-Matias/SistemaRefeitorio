@@ -1,6 +1,11 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using ApiRefeicoes.Services;
 using Microsoft.Azure.CognitiveServices.Vision.Face.Models;
+using System;
+using System.IO;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 
 namespace ApiRefeicoes.Controllers
 {
@@ -38,6 +43,27 @@ namespace ApiRefeicoes.Controllers
             }
         }
 
+        [HttpGet("group-details")]
+        public async Task<ActionResult<object>> GetGroupDetails()
+        {
+            try
+            {
+                var group = await _faceApiService.GetPersonGroupAsync();
+                return Ok(new
+                {
+                    group.PersonGroupId,
+                    group.Name,
+                    group.RecognitionModel,
+                    group.UserData
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao obter detalhes do grupo.");
+                return StatusCode(500, new { Message = "Ocorreu um erro ao obter detalhes do grupo.", Details = ex.Message });
+            }
+        }
+
         [HttpGet("force-train")]
         public async Task<IActionResult> ForceTrain()
         {
@@ -54,17 +80,20 @@ namespace ApiRefeicoes.Controllers
             }
         }
 
-        // O método HardReset agora chama EnsurePersonGroupExistsAsync diretamente,
-        // o que é mais seguro do que chamar GetTrainingStatusAsync para um grupo novo.
+        // --- INÍCIO DA CORREÇÃO ---
         [HttpGet("hard-reset")]
         public async Task<IActionResult> HardReset()
         {
             try
             {
                 _logger.LogWarning("!!! INICIANDO HARD RESET DO PERSON GROUP !!!");
+
+                // Passo 1: Apagar o grupo existente (se houver).
                 await _faceApiService.DeletePersonGroupAsync();
-                // Apenas garante que o grupo seja recriado.
+
+                // Passo 2: Chamar EnsurePersonGroupExistsAsync que agora contém a lógica de criação correta.
                 await _faceApiService.EnsurePersonGroupExistsAsync();
+
                 _logger.LogInformation("!!! HARD RESET CONCLUÍDO. O GRUPO FOI APAGADO E RECRIADO. !!!");
                 return Ok(new { Message = "Hard Reset concluído. O grupo 'colaboradores' foi apagado e recriado. Por favor, cadastre um novo colaborador para iniciar o treino." });
             }
@@ -74,52 +103,6 @@ namespace ApiRefeicoes.Controllers
                 return StatusCode(500, new { Message = "Ocorreu um erro durante o Hard Reset.", Details = ex.Message });
             }
         }
-
-        [HttpPost("verify-faces")]
-        public async Task<ActionResult<object>> VerifyFaces([FromForm] IFormFile fotoCadastro, [FromForm] IFormFile fotoApp)
-        {
-            if (fotoCadastro == null || fotoApp == null)
-            {
-                return BadRequest("É necessário enviar duas imagens: 'fotoCadastro' e 'fotoApp'.");
-            }
-
-            try
-            {
-                using var ms1 = new MemoryStream();
-                await fotoCadastro.CopyToAsync(ms1);
-                var bytesCadastro = ms1.ToArray();
-
-                using var ms2 = new MemoryStream();
-                await fotoApp.CopyToAsync(ms2);
-                var bytesApp = ms2.ToArray();
-
-                var faceIdCadastroStr = await _faceApiService.DetectFaceAndGetId(bytesCadastro, bypassIdentify: true);
-                var faceIdAppStr = await _faceApiService.DetectFaceAndGetId(bytesApp, bypassIdentify: true);
-
-                if (string.IsNullOrEmpty(faceIdCadastroStr) || string.IsNullOrEmpty(faceIdAppStr))
-                {
-                    return BadRequest("Não foi possível detetar um rosto em uma ou ambas as imagens.");
-                }
-
-                Guid.TryParse(faceIdCadastroStr, out Guid faceIdCadastro);
-                Guid.TryParse(faceIdAppStr, out Guid faceIdApp);
-
-                var (isIdentical, confidence) = await _faceApiService.VerifyFaces(faceIdCadastro, faceIdApp);
-
-                return Ok(new
-                {
-                    IsIdentical = isIdentical,
-                    Confidence = confidence,
-                    Message = isIdentical
-                        ? "As faces correspondem! O problema é 100% o estado do treino do Grupo de Pessoas."
-                        : "As faces não correspondem. Verifique a qualidade de ambas as imagens."
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao verificar faces.");
-                return StatusCode(500, new { Message = "Ocorreu um erro interno durante a verificação.", Details = ex.Message });
-            }
-        }
+        // --- FIM DA CORREÇÃO ---
     }
 }

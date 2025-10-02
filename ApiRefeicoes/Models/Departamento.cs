@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic; // Adicione este using
+﻿using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace ApiRefeicoes.Models
@@ -9,13 +9,13 @@ namespace ApiRefeicoes.Models
 
         [Required]
         [StringLength(100)]
-        public string? Nome { get; set; }
+        public string Nome { get; set; }
 
+        // Mantido conforme solicitado
+        [StringLength(100)]
         public string? DepartamentoGenerico { get; set; }
 
-        // --- INÍCIO DA CORREÇÃO (CS1061) ---
-        // Propriedade de navegação para EF Core entender o relacionamento
-        public ICollection<Colaborador> Colaboradores { get; set; } = new List<Colaborador>();
-        // --- FIM DA CORREÇÃO ---
+        // Propriedade de navegação para EF Core
+        public virtual ICollection<Colaborador> Colaboradores { get; set; } = new List<Colaborador>();
     }
 }
