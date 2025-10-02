@@ -2,15 +2,13 @@
 using Microsoft.Azure.CognitiveServices.Vision.Face.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.Http;
-using System.Text;
 using System.Threading.Tasks;
+using ApiRefeicoes.Constants;
 
 namespace ApiRefeicoes.Services
 {
@@ -20,10 +18,6 @@ namespace ApiRefeicoes.Services
         private readonly string _endpoint;
         private readonly string _personGroupId;
         private readonly ILogger<FaceApiService> _logger;
-
-        private const string RecognitionModel = "recognition_04";
-        private const string DetectionModel = "detection_03";
-
 
         public FaceApiService(IConfiguration configuration, ILogger<FaceApiService> logger)
         {
@@ -43,99 +37,64 @@ namespace ApiRefeicoes.Services
             var client = GetClient();
             try
             {
-                await client.PersonGroup.GetAsync(_personGroupId);
-                _logger.LogInformation("Grupo de Pessoas '{PersonGroupId}' já existe.", _personGroupId);
+                await client.PersonGroup.GetAsync(_personGroupId, returnRecognitionModel: true);
+                _logger.LogInformation("[{Timestamp}] Grupo '{PersonGroupId}' já existe.", DateTime.UtcNow, _personGroupId);
             }
             catch (APIErrorException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
             {
-                _logger.LogWarning("Grupo de Pessoas '{PersonGroupId}' não encontrado. A criar um novo com o modelo de reconhecimento correto.", _personGroupId);
+                _logger.LogWarning("[{Timestamp}] Grupo '{PersonGroupId}' não encontrado. Criando novo com modelo {RecognitionModel}.", DateTime.UtcNow, _personGroupId, FaceApiModels.RecognitionModel);
 
-                using (var httpClient = new HttpClient())
-                {
-                    var uri = $"{_endpoint}face/v1.0/persongroups/{_personGroupId}";
-                    httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", _apiKey);
+                await client.PersonGroup.CreateAsync(
+                    personGroupId: _personGroupId,
+                    name: "Grupo de Colaboradores do Refeitório",
+                    userData: "Grupo criado automaticamente",
+                    recognitionModel: FaceApiModels.RecognitionModel
+                );
 
-                    var body = new
-                    {
-                        name = "Grupo de Colaboradores do Refeitório",
-                        recognitionModel = RecognitionModel
-                    };
-
-                    var jsonBody = JsonConvert.SerializeObject(body);
-                    using (var content = new StringContent(jsonBody, Encoding.UTF8, "application/json"))
-                    {
-                        var response = await httpClient.PutAsync(uri, content);
-                        if (!response.IsSuccessStatusCode)
-                        {
-                            var errorContent = await response.Content.ReadAsStringAsync();
-                            _logger.LogError("Falha ao criar o PersonGroup manualmente. Status: {StatusCode}, Resposta: {ErrorContent}", response.StatusCode, errorContent);
-                            throw new HttpRequestException($"Falha ao criar o PersonGroup: {errorContent}");
-                        }
-                    }
-                }
-                _logger.LogInformation("Grupo de Pessoas '{PersonGroupId}' criado com sucesso utilizando o modelo {RecognitionModel}.", _personGroupId, RecognitionModel);
+                _logger.LogInformation("[{Timestamp}] Grupo '{PersonGroupId}' criado com sucesso.", DateTime.UtcNow, _personGroupId);
             }
         }
 
-        public async Task<Guid?> DetectFace(Stream imageStream)
+        public async Task<(Guid? faceId, string message)> DetectFaceWithFeedback(Stream imageStream)
         {
             var client = GetClient();
             try
             {
-                if (!imageStream.CanSeek)
+                imageStream.Position = 0;
+                var faces = await client.Face.DetectWithStreamAsync(imageStream, recognitionModel: FaceApiModels.RecognitionModel, detectionModel: FaceApiModels.DetectionModel);
+
+                if (faces.Any())
                 {
-                    using var memoryStream = new MemoryStream();
-                    await imageStream.CopyToAsync(memoryStream);
-                    memoryStream.Position = 0;
-                    imageStream = memoryStream;
-                }
-                else
-                {
-                    imageStream.Position = 0;
+                    var faceId = faces.First().FaceId;
+                    _logger.LogInformation("[{Timestamp}] Face detectada: {FaceId}", DateTime.UtcNow, faceId);
+                    return (faceId, "Face detectada com sucesso.");
                 }
 
-                var detectedFaces = await client.Face.DetectWithStreamAsync(imageStream, recognitionModel: RecognitionModel, detectionModel: DetectionModel);
-
-                if (detectedFaces.Any())
-                {
-                    var firstFace = detectedFaces.First();
-                    _logger.LogInformation("Face detetada com sucesso. FaceId: {FaceId}", firstFace.FaceId);
-                    return firstFace.FaceId;
-                }
-                _logger.LogWarning("Nenhuma face detetada na imagem.");
-                return null;
+                _logger.LogWarning("[{Timestamp}] Nenhuma face detectada.", DateTime.UtcNow);
+                return (null, "Nenhuma face detectada.");
             }
-            catch (APIErrorException apiEx)
+            catch (APIErrorException ex)
             {
-                _logger.LogError(apiEx, "Erro na API do Azure (Detetar): {Message}", apiEx.Body?.Error?.Message);
-                return null;
+                _logger.LogError(ex, "[{Timestamp}] Erro na API: {Message}", DateTime.UtcNow, ex.Body?.Error?.Message);
+                return (null, $"Erro na API: {ex.Body?.Error?.Message}");
             }
         }
 
-        // --- INÍCIO DA CORREÇÃO ---
-        // Método reintroduzido para o ReconhecimentoController
-        public async Task<string> DetectFaceAndGetId(Stream imageStream)
-        {
-            Guid? faceId = await DetectFace(imageStream);
-            return faceId?.ToString();
-        }
-
-        // Método reintroduzido para o ReconhecimentoController
         public async Task<(bool isIdentical, double confidence)> VerifyFaces(Guid faceId1, Guid faceId2)
         {
             var client = GetClient();
             try
             {
                 var result = await client.Face.VerifyFaceToFaceAsync(faceId1, faceId2);
+                _logger.LogInformation("[{Timestamp}] Verificação concluída. Confiança: {Confidence}", DateTime.UtcNow, result.Confidence);
                 return (result.IsIdentical, result.Confidence);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erro ao verificar faces.");
+                _logger.LogError(ex, "[{Timestamp}] Erro ao verificar faces.", DateTime.UtcNow);
                 return (false, 0);
             }
         }
-        // --- FIM DA CORREÇÃO ---
 
         public async Task<Guid?> IdentifyFaceAsync(Guid faceId)
         {
@@ -143,19 +102,21 @@ namespace ApiRefeicoes.Services
             try
             {
                 await EnsurePersonGroupExistsAsync();
-                var identifyResults = await client.Face.IdentifyAsync(new List<Guid> { faceId }, _personGroupId);
-                var result = identifyResults.FirstOrDefault()?.Candidates.FirstOrDefault();
-                if (result != null && result.Confidence > 0.5)
+                var results = await client.Face.IdentifyAsync(new List<Guid> { faceId }, _personGroupId);
+                var candidate = results.FirstOrDefault()?.Candidates.FirstOrDefault();
+
+                if (candidate != null && candidate.Confidence > 0.5)
                 {
-                    _logger.LogInformation("Pessoa identificada: {PersonId} com confiança {Confidence}", result.PersonId, result.Confidence);
-                    return result.PersonId;
+                    _logger.LogInformation("[{Timestamp}] Pessoa identificada: {PersonId} com confiança {Confidence}", DateTime.UtcNow, candidate.PersonId, candidate.Confidence);
+                    return candidate.PersonId;
                 }
-                _logger.LogWarning("Nenhuma pessoa correspondente encontrada no grupo para o FaceId fornecido.");
+
+                _logger.LogWarning("[{Timestamp}] Nenhuma correspondência encontrada.", DateTime.UtcNow);
                 return null;
             }
-            catch (APIErrorException apiEx)
+            catch (APIErrorException ex)
             {
-                _logger.LogError(apiEx, "Erro na API do Azure (Identificar): {Message}", apiEx.Body?.Error?.Message);
+                _logger.LogError(ex, "[{Timestamp}] Erro na API (Identificar): {Message}", DateTime.UtcNow, ex.Body?.Error?.Message);
                 return null;
             }
         }
@@ -165,7 +126,7 @@ namespace ApiRefeicoes.Services
             await EnsurePersonGroupExistsAsync();
             var client = GetClient();
             var person = await client.PersonGroupPerson.CreateAsync(_personGroupId, name);
-            _logger.LogInformation("Pessoa '{Name}' criada no Azure com PersonId: {PersonId}", name, person.PersonId);
+            _logger.LogInformation("[{Timestamp}] Pessoa '{Name}' criada com ID: {PersonId}", DateTime.UtcNow, name, person.PersonId);
             return person.PersonId;
         }
 
@@ -174,8 +135,11 @@ namespace ApiRefeicoes.Services
             await EnsurePersonGroupExistsAsync();
             var client = GetClient();
             imageStream.Position = 0;
-            var persistedFace = await client.PersonGroupPerson.AddFaceFromStreamAsync(_personGroupId, personId, imageStream, detectionModel: DetectionModel);
-            _logger.LogInformation("Face adicionada à pessoa {PersonId}. PersistedFaceId: {PersistedFaceId}", personId, persistedFace.PersistedFaceId);
+
+            var persistedFace = await client.PersonGroupPerson.AddFaceFromStreamAsync(
+                _personGroupId, personId, imageStream, detectionModel: FaceApiModels.DetectionModel);
+
+            _logger.LogInformation("[{Timestamp}] Face adicionada à pessoa {PersonId}. PersistedFaceId: {PersistedFaceId}", DateTime.UtcNow, personId, persistedFace.PersistedFaceId);
             return persistedFace;
         }
 
@@ -183,7 +147,7 @@ namespace ApiRefeicoes.Services
         {
             await EnsurePersonGroupExistsAsync();
             var client = GetClient();
-            _logger.LogInformation("--- Iniciando o comando de treino para o grupo: {PersonGroupId} ---", _personGroupId);
+            _logger.LogInformation("[{Timestamp}] Iniciando treino do grupo: {PersonGroupId}", DateTime.UtcNow, _personGroupId);
             await client.PersonGroup.TrainAsync(_personGroupId);
         }
 
@@ -196,8 +160,18 @@ namespace ApiRefeicoes.Services
         public async Task<PersonGroup> GetPersonGroupAsync()
         {
             var client = GetClient();
-            _logger.LogInformation("A obter detalhes do PersonGroup '{PersonGroupId}' do Azure.", _personGroupId);
-            return await client.PersonGroup.GetAsync(_personGroupId);
+            _logger.LogInformation("[{Timestamp}] Obtendo detalhes do grupo '{PersonGroupId}'.", DateTime.UtcNow, _personGroupId);
+            return await client.PersonGroup.GetAsync(_personGroupId, returnRecognitionModel: true);
+        }
+        public async Task<Guid?> DetectFace(Stream imageStream)
+        {
+            var (faceId, _) = await DetectFaceWithFeedback(imageStream);
+            return faceId;
+        }
+        public async Task<string> DetectFaceAndGetId(Stream imageStream)
+        {
+            var (faceId, _) = await DetectFaceWithFeedback(imageStream);
+            return faceId?.ToString();
         }
 
         public async Task DeletePersonGroupAsync()
@@ -206,11 +180,11 @@ namespace ApiRefeicoes.Services
             try
             {
                 await client.PersonGroup.DeleteAsync(_personGroupId);
-                _logger.LogInformation("Grupo de Pessoas '{PersonGroupId}' apagado com sucesso.", _personGroupId);
+                _logger.LogInformation("[{Timestamp}] Grupo '{PersonGroupId}' apagado com sucesso.", DateTime.UtcNow, _personGroupId);
             }
             catch (APIErrorException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
             {
-                _logger.LogWarning("Tentativa de apagar o Grupo de Pessoas '{PersonGroupId}', mas ele não foi encontrado.", _personGroupId);
+                _logger.LogWarning("[{Timestamp}] Tentativa de apagar grupo '{PersonGroupId}', mas ele não foi encontrado.", DateTime.UtcNow, _personGroupId);
             }
         }
     }
