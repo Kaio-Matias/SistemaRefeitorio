@@ -21,9 +21,12 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     {
         options.LoginPath = "/Login";
         options.LogoutPath = "/Logout";
+
+        // ADICIONE ESTA LINHA
+        options.AccessDeniedPath = "/AccessDenied";
+
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
     });
-
 // Configurar o HttpClient e o ApiClient
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient<ApiClient>(client =>

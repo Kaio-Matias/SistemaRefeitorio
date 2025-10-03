@@ -1,13 +1,15 @@
-﻿using System.Net.Http;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+using Portal_Refeicoes.Models;
+using Portal_Refeicoes.Pages.Usuarios; // Adicionado para simplificar a referência
+using System.Collections.Generic;
+using System.IO;
+using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.Tasks;
-using System.Collections.Generic;
-using Microsoft.AspNetCore.Http;
-using Portal_Refeicoes.Models;
-using System.IO;
-using System.Net.Http.Json;
-using Microsoft.Extensions.Logging;
 
 namespace Portal_Refeicoes.Services
 {
@@ -24,46 +26,88 @@ namespace Portal_Refeicoes.Services
             _logger = logger;
         }
 
-        private void SetAuthorizationHeader(HttpRequestHeaders headers)
+        private void AddAuthorizationHeader()
         {
-            var token = _httpContextAccessor.HttpContext.Session.GetString("JWToken");
+            var token = _httpContextAccessor.HttpContext?.User?.FindFirst("access_token")?.Value;
+
+            _httpClient.DefaultRequestHeaders.Authorization = null;
+
             if (!string.IsNullOrEmpty(token))
             {
-                headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             }
         }
 
-        // --- MÉTODOS DE AUTENTICAÇÃO E COLABORADOR ---
-        public async Task<string> LoginAsync(string username, string password)
+        // --- MÉTODOS DE USUÁRIO E REFEIÇÃO ---
+
+        public async Task<List<Usuario>> GetUsuariosAsync()
         {
-            var response = await _httpClient.PostAsJsonAsync("api/auth/login", new { username, password });
-            if (response.IsSuccessStatusCode)
+            AddAuthorizationHeader();
+            try
             {
-                var result = await response.Content.ReadFromJsonAsync<JsonElement>();
-                return result.GetProperty("token").GetString();
+                return await _httpClient.GetFromJsonAsync<List<Usuario>>("api/Usuarios");
             }
-            return null;
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "Erro ao buscar usuários da API.");
+                return new List<Usuario>();
+            }
         }
+
+        // --- CORREÇÃO APLICADA AQUI ---
+        // Usamos o nome completo da classe interna 'InputModel' que está dentro de 'CreateModel'
+        public async Task<bool> CreateUsuarioAsync(CreateModel.InputModel usuario)
+        {
+            AddAuthorizationHeader();
+            // A API espera um objeto com as propriedades Username, Password e Role.
+            var response = await _httpClient.PostAsJsonAsync("api/Usuarios", new
+            {
+                Username = usuario.Username,
+                Password = usuario.Password,
+                Email = usuario.Email,
+                Role = usuario.Role
+            });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogError("Erro ao criar usuário: {StatusCode} - {Content}", response.StatusCode, errorContent);
+                return false;
+            }
+            return true;
+        }
+
+        public async Task<List<RefeicaoViewModel>> GetRefeicoesAsync()
+        {
+            AddAuthorizationHeader();
+            try
+            {
+                return await _httpClient.GetFromJsonAsync<List<RefeicaoViewModel>>("api/Refeicoes");
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "Erro ao buscar refeições da API.");
+                return new List<RefeicaoViewModel>();
+            }
+        }
+
+        // --- MÉTODOS DE COLABORADOR ---
 
         public async Task<List<ColaboradorViewModel>> GetColaboradoresAsync()
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, "api/colaboradores");
-            SetAuthorizationHeader(request.Headers);
-            var response = await _httpClient.SendAsync(request);
-            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<List<ColaboradorViewModel>>() : new List<ColaboradorViewModel>();
+            AddAuthorizationHeader();
+            return await _httpClient.GetFromJsonAsync<List<ColaboradorViewModel>>("api/colaboradores") ?? new List<ColaboradorViewModel>();
         }
 
-        // --- MÉTODO ADICIONADO (CS1061) ---
         public async Task<ColaboradorViewModel> GetColaboradorByIdAsync(int id)
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, $"api/colaboradores/{id}");
-            SetAuthorizationHeader(request.Headers);
-            var response = await _httpClient.SendAsync(request);
-            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<ColaboradorViewModel>() : null;
+            AddAuthorizationHeader();
+            return await _httpClient.GetFromJsonAsync<ColaboradorViewModel>($"api/colaboradores/{id}");
         }
 
         public async Task<bool> CreateColaboradorAsync(ColaboradorCreateModel colaborador, IFormFile imagem)
         {
+            AddAuthorizationHeader();
             using var content = new MultipartFormDataContent();
             content.Add(new StringContent(colaborador.Nome), "Nome");
             content.Add(new StringContent(colaborador.CartaoPonto), "CartaoPonto");
@@ -72,15 +116,13 @@ namespace Portal_Refeicoes.Services
             if (imagem != null)
                 content.Add(new StreamContent(imagem.OpenReadStream()), "imagem", imagem.FileName);
 
-            var request = new HttpRequestMessage(HttpMethod.Post, "api/colaboradores") { Content = content };
-            SetAuthorizationHeader(request.Headers);
-            var response = await _httpClient.SendAsync(request);
+            var response = await _httpClient.PostAsync("api/colaboradores", content);
             return response.IsSuccessStatusCode;
         }
 
-        // --- MÉTODO ADICIONADO (CS1061) ---
         public async Task<bool> UpdateColaboradorAsync(int id, ColaboradorEditModel colaborador, IFormFile? imagem)
         {
+            AddAuthorizationHeader();
             using var content = new MultipartFormDataContent();
             content.Add(new StringContent(colaborador.Nome), "Nome");
             content.Add(new StringContent(colaborador.CartaoPonto), "CartaoPonto");
@@ -90,60 +132,43 @@ namespace Portal_Refeicoes.Services
             if (imagem != null)
                 content.Add(new StreamContent(imagem.OpenReadStream()), "imagem", imagem.FileName);
 
-            var request = new HttpRequestMessage(HttpMethod.Put, $"api/colaboradores/{id}") { Content = content };
-            SetAuthorizationHeader(request.Headers);
-            var response = await _httpClient.SendAsync(request);
+            var response = await _httpClient.PutAsync($"api/colaboradores/{id}", content);
             return response.IsSuccessStatusCode;
         }
 
         // --- MÉTODOS DE DEPARTAMENTO E FUNÇÃO ---
-        // --- MÉTODO ADICIONADO (CS1061) ---
+
         public async Task<List<Departamento>> GetDepartamentosAsync()
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, "api/departamentos");
-            SetAuthorizationHeader(request.Headers);
-            var response = await _httpClient.SendAsync(request);
-            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<List<Departamento>>() : new List<Departamento>();
+            AddAuthorizationHeader();
+            return await _httpClient.GetFromJsonAsync<List<Departamento>>("api/departamentos") ?? new List<Departamento>();
         }
 
         public async Task<List<Funcao>> GetFuncoesAsync()
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, "api/funcoes");
-            SetAuthorizationHeader(request.Headers);
-            var response = await _httpClient.SendAsync(request);
-            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<List<Funcao>>() : new List<Funcao>();
-        }
-
-        // --- MÉTODO DE SUPER ADMIN ---
-        // --- MÉTODO ADICIONADO (CS1061) ---
-        public async Task<bool> CreateSuperAdminAsync(string username, string password)
-        {
-            var response = await _httpClient.PostAsJsonAsync("api/usuarios", new { username, password, role = "SuperAdmin" });
-            return response.IsSuccessStatusCode;
+            AddAuthorizationHeader();
+            return await _httpClient.GetFromJsonAsync<List<Funcao>>("api/funcoes") ?? new List<Funcao>();
         }
 
         // --- MÉTODOS DE PARADA DE FÁBRICA ---
+
         public async Task<List<ParadaDeFabrica>> GetParadasDeFabricaAsync()
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, "api/ParadaDeFabrica");
-            SetAuthorizationHeader(request.Headers);
-            var response = await _httpClient.SendAsync(request);
-            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<List<ParadaDeFabrica>>() : new List<ParadaDeFabrica>();
+            AddAuthorizationHeader();
+            return await _httpClient.GetFromJsonAsync<List<ParadaDeFabrica>>("api/ParadaDeFabrica") ?? new List<ParadaDeFabrica>();
         }
 
         public async Task<bool> CreateParadaDeFabricaAsync(ParadaDeFabrica parada)
         {
-            var request = new HttpRequestMessage(HttpMethod.Post, "api/ParadaDeFabrica") { Content = JsonContent.Create(parada) };
-            SetAuthorizationHeader(request.Headers);
-            var response = await _httpClient.SendAsync(request);
+            AddAuthorizationHeader();
+            var response = await _httpClient.PostAsJsonAsync("api/ParadaDeFabrica", parada);
             return response.IsSuccessStatusCode;
         }
 
         public async Task<bool> DeleteParadaDeFabricaAsync(int id)
         {
-            var request = new HttpRequestMessage(HttpMethod.Delete, $"api/ParadaDeFabrica/{id}");
-            SetAuthorizationHeader(request.Headers);
-            var response = await _httpClient.SendAsync(request);
+            AddAuthorizationHeader();
+            var response = await _httpClient.DeleteAsync($"api/ParadaDeFabrica/{id}");
             return response.IsSuccessStatusCode;
         }
     }

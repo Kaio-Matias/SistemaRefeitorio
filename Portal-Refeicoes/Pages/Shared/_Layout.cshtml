@@ -1,8 +1,7 @@
 ﻿@functions {
-    // Função auxiliar para determinar a página atual e destacar o link ativo no menu
+    // Sua função IsPageActive
     public string IsPageActive(string page)
     {
-        // Garante que a comparação ignore a barra inicial para ser mais robusta
         var currentPage = ViewContext.RouteData.Values["Page"]?.ToString()?.TrimStart('/');
         var targetPage = page.TrimStart('/');
         return currentPage?.StartsWith(targetPage, StringComparison.OrdinalIgnoreCase) ?? false ? "active" : "";
@@ -73,13 +72,19 @@
                                 Funções
                             </a>
                         </li>
-
                         <li class="nav-item">
                             <a class="nav-link @IsPageActive("/ParadaDeFabrica")" asp-page="/ParadaDeFabrica/Index">
                                 <i class="bi bi-calendar-x me-2"></i>
                                 Parada de Fábrica
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link @IsPageActive("/Refeicoes")" asp-page="/Refeicoes/Index">
+                                <i class="bi bi-egg-fried me-2"></i>
+                                Refeições
+                            </a>
+                        </li>
+
                         @if (User.IsInRole("SuperAdmin"))
                         {
                             <li class="nav-item">
@@ -89,14 +94,12 @@
                                 </a>
                             </li>
                         }
+
                     </ul>
                 </div>
             </nav>
 
             <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
-                <div class="pt-3 pb-2 mb-3 border-bottom">
-                    <h1 class="h2">@ViewData["Title"]</h1>
-                </div>
                 @RenderBody()
             </main>
         </div>

@@ -91,11 +91,10 @@ body {
     right: 1rem;
 }
 
+/* --- ESTILOS CORRIGIDOS E RESPONSIVOS PARA A PÁGINA DE LOGIN --- */
 
-/* --- Estilos da Página de Login --- */
-
-html, .login-page-body, .login-page-body > .container-fluid {
-    height: 100%;
+.login-page-body, .login-page-body .row {
+    min-height: 100vh;
 }
 
 .login-image-section {
@@ -107,10 +106,31 @@ html, .login-page-body, .login-page-body > .container-fluid {
 
 .login-form-section {
     background-color: #DE7913;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-    /* Centraliza o conteúdo dentro da coluna do formulário */
+    /* Aplica o estilo de "card" diretamente na tag <main> do layout de login */
     .login-form-section main {
+        background-color: white;
         padding: 2rem;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        width: 100%;
         max-width: 450px;
     }
+
+.logo {
+    display: block;
+    margin: 0 auto 20px auto;
+    max-width: 150px;
+}
+
+/* Media Query para responsividade em telas de celular */
+@media (max-width: 767.98px) {
+    .login-form-section {
+        min-height: 100vh;
+        padding: 1rem; /* Adiciona um respiro nas laterais do card no celular */
+    }
+}

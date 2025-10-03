@@ -1,0 +1,17 @@
+﻿@page
+@model Portal_Refeicoes.Pages.AccessDeniedModel
+@{
+    ViewData["Title"] = "Acesso Negado";
+    Layout = "_Layout"; // Ou o layout que preferir
+}
+
+<div class="text-center" style="margin-top: 100px;">
+    <h1 class="display-4 text-danger">Acesso Negado</h1>
+    <p class="lead">
+        Você não tem permissão para visualizar esta página.
+    </p>
+    <p>
+        Por favor, contate o administrador do sistema se você acredita que isso é um erro.
+    </p>
+    <a asp-page="/Index" class="btn btn-primary mt-3">Voltar ao Início</a>
+</div>
