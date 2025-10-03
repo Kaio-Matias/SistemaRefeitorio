@@ -75,18 +75,19 @@ namespace ApiRefeicoes.Services
             }
             catch (APIErrorException ex)
             {
-                _logger.LogError(ex, "[{Timestamp}] Erro na API: {Message}", DateTime.UtcNow, ex.Body?.Error?.Message);
+                _logger.LogError(ex, "[{Timestamp}] Erro na API ao detectar face: {Message}", DateTime.UtcNow, ex.Body?.Error?.Message);
                 return (null, $"Erro na API: {ex.Body?.Error?.Message}");
             }
         }
 
+        // **** MÉTODO ADICIONADO DE VOLTA ****
         public async Task<(bool isIdentical, double confidence)> VerifyFaces(Guid faceId1, Guid faceId2)
         {
             var client = GetClient();
             try
             {
                 var result = await client.Face.VerifyFaceToFaceAsync(faceId1, faceId2);
-                _logger.LogInformation("[{Timestamp}] Verificação concluída. Confiança: {Confidence}", DateTime.UtcNow, result.Confidence);
+                _logger.LogInformation("[{Timestamp}] Verificação Face-a-Face concluída. Confiança: {Confidence}", DateTime.UtcNow, result.Confidence);
                 return (result.IsIdentical, result.Confidence);
             }
             catch (Exception ex)
@@ -96,28 +97,24 @@ namespace ApiRefeicoes.Services
             }
         }
 
-        public async Task<Guid?> IdentifyFaceAsync(Guid faceId)
+        public async Task<(bool isIdentical, double confidence)> VerifyFaceToPersonAsync(Guid faceId, Guid personId)
         {
             var client = GetClient();
             try
             {
-                await EnsurePersonGroupExistsAsync();
-                var results = await client.Face.IdentifyAsync(new List<Guid> { faceId }, _personGroupId);
-                var candidate = results.FirstOrDefault()?.Candidates.FirstOrDefault();
-
-                if (candidate != null && candidate.Confidence > 0.5)
-                {
-                    _logger.LogInformation("[{Timestamp}] Pessoa identificada: {PersonId} com confiança {Confidence}", DateTime.UtcNow, candidate.PersonId, candidate.Confidence);
-                    return candidate.PersonId;
-                }
-
-                _logger.LogWarning("[{Timestamp}] Nenhuma correspondência encontrada.", DateTime.UtcNow);
-                return null;
+                var result = await client.Face.VerifyFaceToPersonAsync(faceId, personId, _personGroupId);
+                _logger.LogInformation("[{Timestamp}] Verificação 1:1 (faceId x personId) concluída para PersonId {PersonId}. Confiança: {Confidence}", DateTime.UtcNow, personId, result.Confidence);
+                return (result.IsIdentical, result.Confidence);
             }
             catch (APIErrorException ex)
             {
-                _logger.LogError(ex, "[{Timestamp}] Erro na API (Identificar): {Message}", DateTime.UtcNow, ex.Body?.Error?.Message);
-                return null;
+                _logger.LogError(ex, "[{Timestamp}] Erro na API ao verificar Face-to-Person para PersonId {PersonId}: {Message}", DateTime.UtcNow, personId, ex.Body?.Error?.Message);
+                return (false, 0);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[{Timestamp}] Erro geral ao verificar Face-to-Person para PersonId {PersonId}.", DateTime.UtcNow, personId);
+                return (false, 0);
             }
         }
 

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -20,6 +21,7 @@ namespace ApiRefeicoes.Controllers
         private readonly FaceApiService _faceApiService;
         private readonly ApiRefeicoesDbContext _context;
         private readonly ILogger<IdentificacaoController> _logger;
+        private const double LimiarDeConfianca = 0.7; // Limiar de 50%
 
         public IdentificacaoController(FaceApiService faceApiService, ApiRefeicoesDbContext context, ILogger<IdentificacaoController> logger)
         {
@@ -39,63 +41,71 @@ namespace ApiRefeicoes.Controllers
 
             try
             {
-                using var stream = file.OpenReadStream();
-                var faceIdTemporario = await _faceApiService.DetectFace(stream);
+                await using var memoryStream = new MemoryStream();
+                await file.CopyToAsync(memoryStream);
+
+                var (faceIdTemporario, detectMessage) = await _faceApiService.DetectFaceWithFeedback(memoryStream);
 
                 if (!faceIdTemporario.HasValue)
                 {
-                    return NotFound(new { Sucesso = false, Mensagem = "Nenhuma face foi detectada." });
+                    return NotFound(new { Sucesso = false, Mensagem = detectMessage });
                 }
 
-                var personIdIdentificado = await _faceApiService.IdentifyFaceAsync(faceIdTemporario.Value);
+                var colaboradores = await _context.Colaboradores
+                                                  .Where(c => c.PersonId != null && c.Ativo)
+                                                  .Include(c => c.Departamento)
+                                                  .Include(c => c.Funcao)
+                                                  .AsNoTracking()
+                                                  .ToListAsync();
 
-                if (!personIdIdentificado.HasValue)
+                if (!colaboradores.Any())
                 {
+                    _logger.LogWarning("Nenhum colaborador com cadastro facial ativo encontrado no banco de dados.");
+                    return NotFound(new { Sucesso = false, Mensagem = "Nenhum colaborador com cadastro facial ativo encontrado." });
+                }
+
+                Colaborador colaboradorVerificado = null;
+
+                foreach (var colaborador in colaboradores)
+                {
+                    _logger.LogInformation("Verificando se a face pertence ao colaborador: {Nome} (PersonId: {PersonId})", colaborador.Nome, colaborador.PersonId);
+
+                    var (isIdentical, confidence) = await _faceApiService.VerifyFaceToPersonAsync(faceIdTemporario.Value, colaborador.PersonId.Value);
+
+                    if (isIdentical && confidence > LimiarDeConfianca)
+                    {
+                        _logger.LogInformation("VERIFICAÇÃO BEM-SUCEDIDA: Colaborador {Nome} verificado com confiança de {Confidence}", colaborador.Nome, confidence);
+                        colaboradorVerificado = colaborador;
+                        break;
+                    }
+                }
+
+                if (colaboradorVerificado == null)
+                {
+                    _logger.LogWarning("VERIFICAÇÃO FALHOU: Nenhuma correspondência encontrada para a face detectada.");
                     return NotFound(new { Sucesso = false, Mensagem = "Face não reconhecida no sistema." });
                 }
 
-                var colaborador = await _context.Colaboradores
-                    .Include(c => c.Departamento)
-                    .Include(c => c.Funcao)
-                    .FirstOrDefaultAsync(c => c.PersonId == personIdIdentificado.Value);
-
-                if (colaborador == null)
-                {
-                    _logger.LogError("PersonId {personId} identificado, mas não encontrado no BD.", personIdIdentificado.Value);
-                    return NotFound(new { Sucesso = false, Mensagem = "Colaborador não encontrado no banco de dados." });
-                }
-
-                if (!colaborador.Ativo)
-                {
-                    _logger.LogWarning("Tentativa de registro negada para colaborador inativo: {Nome}", colaborador.Nome);
-                    return StatusCode(403, new { Sucesso = false, Mensagem = $"Acesso negado. O colaborador {colaborador.Nome} está inativo." });
-                }
-
                 var tipoRefeicao = DeterminarTipoRefeicao();
-                if (string.IsNullOrEmpty(tipoRefeicao))
-                {
-                    return BadRequest(new { Sucesso = false, Mensagem = "Fora do horário de refeição." });
-                }
 
-                // Popula os novos campos, incluindo o DepartamentoGenerico
                 var registro = new RegistroRefeicao
                 {
-                    ColaboradorId = colaborador.Id,
+                    ColaboradorId = colaboradorVerificado.Id,
                     DataHoraRegistro = DateTime.UtcNow,
                     TipoRefeicao = tipoRefeicao,
-                    NomeColaborador = colaborador.Nome,
-                    NomeDepartamento = colaborador.Departamento?.Nome ?? "N/A",
-                    DepartamentoGenerico = colaborador.Departamento?.DepartamentoGenerico, // Adicionado
-                    NomeFuncao = colaborador.Funcao?.Nome ?? "N/A",
-                    ValorRefeicao = 0,
+                    NomeColaborador = colaboradorVerificado.Nome,
+                    NomeDepartamento = colaboradorVerificado.Departamento?.Nome ?? "N/A",
+                    DepartamentoGenerico = colaboradorVerificado.Departamento?.DepartamentoGenerico,
+                    NomeFuncao = colaboradorVerificado.Funcao?.Nome ?? "N/A",
+                    ValorRefeicao = 17,
                     ParadaDeFabrica = false
                 };
 
                 _context.RegistroRefeicoes.Add(registro);
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation("{TipoRefeicao} registrada para {Nome}", tipoRefeicao, colaborador.Nome);
-                return Ok(new { Sucesso = true, Mensagem = $"{tipoRefeicao} registrada com sucesso para {colaborador.Nome}." });
+                _logger.LogInformation("{TipoRefeicao} registrada para {Nome}", tipoRefeicao, colaboradorVerificado.Nome);
+                return Ok(new { Sucesso = true, Mensagem = $"{tipoRefeicao} registrada com sucesso para {colaboradorVerificado.Nome}." });
             }
             catch (Exception ex)
             {
@@ -111,22 +121,25 @@ namespace ApiRefeicoes.Controllers
                 var timeZone = TimeZoneInfo.FindSystemTimeZoneById("E. South America Standard Time");
                 var horaLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone).Hour;
 
-                if (horaLocal >= 6 && horaLocal < 8) return "Café da Manhã";
-                if (horaLocal >= 11 && horaLocal < 14) return "Almoço";
-                if (horaLocal >= 18 && horaLocal < 20) return "Janta";
-                if (horaLocal >= 22 || horaLocal < 1) return "Ceia";
+                // Lógica ajustada para cobrir 24 horas
+                if (horaLocal >= 6 && horaLocal < 11) return "Café da Manhã"; // 06:00 - 10:59
+                if (horaLocal >= 11 && horaLocal < 18) return "Almoço";       // 11:00 - 17:59
+                if (horaLocal >= 18 && horaLocal < 22) return "Janta";        // 18:00 - 21:59
 
-                return null;
+                // Todos os outros horários (22, 23, 0, 1, 2, 3, 4, 5) são considerados Ceia.
+                return "Ceia";
             }
             catch (TimeZoneNotFoundException ex)
             {
                 _logger.LogError(ex, "Fuso horário 'E. South America Standard Time' não encontrado. Usando UTC como fallback.");
                 var horaUtc = DateTime.UtcNow.Hour;
 
-                if (horaUtc >= 9 && horaUtc < 11) return "Café da Manhã";
-                if (horaUtc >= 14 && horaUtc < 17) return "Almoço";
+                // Lógica de fallback ajustada para cobrir 24 horas (considerando UTC-3)
+                if (horaUtc >= 9 && horaUtc < 14) return "Café da Manhã";
+                if (horaUtc >= 14 && horaUtc < 21) return "Almoço";
+                if (horaUtc >= 21 || horaUtc < 1) return "Janta";
 
-                return "Horário Indeterminado (UTC)";
+                return "Ceia";
             }
         }
     }

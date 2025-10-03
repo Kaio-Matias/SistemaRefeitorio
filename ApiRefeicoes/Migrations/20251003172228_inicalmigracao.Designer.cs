@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ApiRefeicoes.Migrations
 {
     [DbContext(typeof(ApiRefeicoesDbContext))]
-    [Migration("20251001185616_InicialMigracao")]
-    partial class InicialMigracao
+    [Migration("20251003172228_inicalmigracao")]
+    partial class inicalmigracao
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
