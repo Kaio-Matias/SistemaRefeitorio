@@ -21,7 +21,7 @@ namespace ApiRefeicoes.Controllers
         private readonly FaceApiService _faceApiService;
         private readonly ApiRefeicoesDbContext _context;
         private readonly ILogger<IdentificacaoController> _logger;
-        private const double LimiarDeConfianca = 0.7; // Limiar de 50%
+        private const double LimiarDeConfianca = 0.1; // Limiar de 10%
 
         public IdentificacaoController(FaceApiService faceApiService, ApiRefeicoesDbContext context, ILogger<IdentificacaoController> logger)
         {
