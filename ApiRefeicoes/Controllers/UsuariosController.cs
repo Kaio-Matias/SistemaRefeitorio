@@ -2,16 +2,14 @@
 using Microsoft.EntityFrameworkCore;
 using ApiRefeicoes.Data;
 using ApiRefeicoes.Models;
-using BCrypt.Net;
 using ApiRefeicoes.Dtos;
 using Microsoft.AspNetCore.Authorization;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace ApiRefeicoes.Controllers
 {
-    [ApiController]
     [Route("api/[controller]")]
+    [ApiController]
+    [Authorize(Roles = "SuperAdmin")]
     public class UsuariosController : ControllerBase
     {
         private readonly ApiRefeicoesDbContext _context;
@@ -21,47 +19,93 @@ namespace ApiRefeicoes.Controllers
             _context = context;
         }
 
-        [Authorize(Roles = "SuperAdmin")] // Apenas SuperAdmins podem listar usuários
+        // GET: api/Usuarios
         [HttpGet]
         public async Task<ActionResult<IEnumerable<UsuarioResponseDto>>> GetUsuarios()
         {
-            var usuarios = await _context.Usuarios
-                .Select(u => new UsuarioResponseDto
-                {
-                    Id = u.Id,
-                    Username = u.Username,
-                    Role = u.Role
-                })
+            return await _context.Usuarios
+                .Select(u => new UsuarioResponseDto { Id = u.Id, Username = u.Username, Role = u.Role })
                 .ToListAsync();
-
-            return Ok(usuarios);
         }
 
-        // Permite a criação do primeiro SuperAdmin sem autenticação.
-        [AllowAnonymous]
-        [HttpPost]
-        public async Task<ActionResult<UsuarioResponseDto>> PostUsuario(CreateUsuarioDto usuarioDto)
+        // GET: api/Usuarios/5
+        [HttpGet("{id}")]
+        public async Task<ActionResult<UsuarioResponseDto>> GetUsuario(int id)
         {
-            // Medida de Segurança: Bloqueia a criação se já existir algum usuário
-            if (await _context.Usuarios.AnyAsync())
+            var usuario = await _context.Usuarios
+                .Select(u => new UsuarioResponseDto { Id = u.Id, Username = u.Username, Role = u.Role })
+                .FirstOrDefaultAsync(u => u.Id == id);
+
+            if (usuario == null)
             {
-                // Verifica se o usuário autenticado é um SuperAdmin para permitir a criação de outros usuários
-                if (!User.Identity.IsAuthenticated || !User.IsInRole("SuperAdmin"))
+                return NotFound();
+            }
+
+            return usuario;
+        }
+
+        // --- MÉTODO NOVO ADICIONADO ---
+        // PUT: api/Usuarios/5
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutUsuario(int id, UpdateUsuarioDto updateUsuarioDto)
+        {
+            var usuario = await _context.Usuarios.FindAsync(id);
+
+            if (usuario == null)
+            {
+                return NotFound();
+            }
+
+            // Verifica se o novo nome de utilizador já está em uso por outro utilizador
+            if (await _context.Usuarios.AnyAsync(u => u.Username == updateUsuarioDto.Username && u.Id != id))
+            {
+                return BadRequest("O nome de usuário já está em uso.");
+            }
+
+            usuario.Username = updateUsuarioDto.Username;
+            usuario.Role = updateUsuarioDto.Role;
+
+            // Altera a senha apenas se uma nova for fornecida
+            if (!string.IsNullOrEmpty(updateUsuarioDto.Password))
+            {
+                usuario.PasswordHash = BCrypt.Net.BCrypt.HashPassword(updateUsuarioDto.Password);
+            }
+
+            _context.Entry(usuario).State = EntityState.Modified;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!_context.Usuarios.Any(e => e.Id == id))
                 {
-                    return Forbid("A criação de novos usuários só é permitida a SuperAdmins.");
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
                 }
             }
 
-            if (await _context.Usuarios.AnyAsync(u => u.Username == usuarioDto.Username))
+            return NoContent(); // Retorna 204 No Content em caso de sucesso
+        }
+
+        // POST: api/Usuarios
+        [HttpPost]
+        public async Task<ActionResult<Usuario>> PostUsuario(CreateUsuarioDto createUsuarioDto)
+        {
+            if (await _context.Usuarios.AnyAsync(u => u.Username == createUsuarioDto.Username))
             {
-                return BadRequest("Nome de usuário já existe.");
+                return BadRequest("O nome de usuário já está em uso.");
             }
 
             var usuario = new Usuario
             {
-                Username = usuarioDto.Username,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(usuarioDto.Password),
-                Role = usuarioDto.Role
+                Username = createUsuarioDto.Username,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(createUsuarioDto.Password),
+                Role = createUsuarioDto.Role,
             };
 
             _context.Usuarios.Add(usuario);
@@ -75,27 +119,6 @@ namespace ApiRefeicoes.Controllers
             };
 
             return CreatedAtAction(nameof(GetUsuario), new { id = usuario.Id }, responseDto);
-        }
-
-        [Authorize] // Qualquer usuário autenticado pode ver seu próprio perfil (exemplo)
-        [HttpGet("{id}")]
-        public async Task<ActionResult<UsuarioResponseDto>> GetUsuario(int id)
-        {
-            var usuario = await _context.Usuarios.FindAsync(id);
-
-            if (usuario == null)
-            {
-                return NotFound();
-            }
-
-            var responseDto = new UsuarioResponseDto
-            {
-                Id = usuario.Id,
-                Username = usuario.Username,
-                Role = usuario.Role
-            };
-
-            return Ok(responseDto);
         }
     }
 }

@@ -2,11 +2,18 @@
 using Microsoft.EntityFrameworkCore;
 using ApiRefeicoes.Data;
 using ApiRefeicoes.Models;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using ApiRefeicoes.Dtos; // Importar a pasta dos DTOs
+using Microsoft.AspNetCore.Authorization; // Importar para segurança
+using System;
 
 namespace ApiRefeicoes.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize] // Protege todos os endpoints deste controlador
     public class RefeicoesController : ControllerBase
     {
         private readonly ApiRefeicoesDbContext _context;
@@ -17,40 +24,63 @@ namespace ApiRefeicoes.Controllers
         }
 
         // GET: api/Refeicoes
-        // Retorna os registros incluindo os dados do colaborador
+        // Retorna uma lista de refeições usando um DTO para evitar referências circulares
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<RegistroRefeicao>>> GetRegistroRefeicoes()
+        public async Task<ActionResult<IEnumerable<RefeicaoResponseDto>>> GetRegistroRefeicoes()
         {
-            return await _context.RegistroRefeicoes
-                                 .Include(r => r.Colaborador) // Inclui o objeto Colaborador
-                                 .ThenInclude(c => c.Funcao) // Opcional: inclui a Função do Colaborador
-                                 .Include(r => r.Colaborador) // Inclui o objeto Colaborador novamente
-                                 .ThenInclude(c => c.Departamento) // Opcional: inclui o Departamento do Colaborador
+            var refeicoes = await _context.RegistroRefeicoes
+                                 .Include(r => r.Colaborador.Funcao)
+                                 .Include(r => r.Colaborador.Departamento)
+                                 .OrderByDescending(r => r.DataHoraRegistro)
+                                 .Select(r => new RefeicaoResponseDto
+                                 {
+                                     Id = r.Id,
+                                     DataHoraRegistro = r.DataHoraRegistro,
+                                     Colaborador = new ColaboradorRefeicaoDto
+                                     {
+                                         Id = r.Colaborador.Id,
+                                         Nome = r.Colaborador.Nome,
+                                         FuncaoNome = r.Colaborador.Funcao.Nome,
+                                         DepartamentoNome = r.Colaborador.Departamento.Nome
+                                     }
+                                 })
                                  .ToListAsync();
+            return Ok(refeicoes);
         }
 
         // GET: api/Refeicoes/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<RegistroRefeicao>> GetRegistroRefeicao(int id)
+        public async Task<ActionResult<RefeicaoResponseDto>> GetRegistroRefeicao(int id)
         {
-            var registroRefeicao = await _context.RegistroRefeicoes
-                                                 .Include(r => r.Colaborador)
-                                                 .ThenInclude(c => c.Funcao)
-                                                 .Include(r => r.Colaborador)
-                                                 .ThenInclude(c => c.Departamento)
-                                                 .FirstOrDefaultAsync(r => r.Id == id);
+            var refeicao = await _context.RegistroRefeicoes
+                                     .Include(r => r.Colaborador.Funcao)
+                                     .Include(r => r.Colaborador.Departamento)
+                                     .Where(r => r.Id == id)
+                                     .Select(r => new RefeicaoResponseDto
+                                     {
+                                         Id = r.Id,
+                                         DataHoraRegistro = r.DataHoraRegistro,
+                                         Colaborador = new ColaboradorRefeicaoDto
+                                         {
+                                             Id = r.Colaborador.Id,
+                                             Nome = r.Colaborador.Nome,
+                                             FuncaoNome = r.Colaborador.Funcao.Nome,
+                                             DepartamentoNome = r.Colaborador.Departamento.Nome
+                                         }
+                                     })
+                                     .FirstOrDefaultAsync();
 
-            if (registroRefeicao == null)
+            if (refeicao == null)
             {
                 return NotFound();
             }
 
-            return registroRefeicao;
+            return Ok(refeicao);
         }
 
         // POST: api/Refeicoes
         [HttpPost]
-        public async Task<ActionResult<RegistroRefeicao>> PostRegistroRefeicao(RegistroRefeicao registroRefeicao)
+        public async Task<ActionResult<RegistroRefeicao>> PostRegistroRefeicao([FromBody] RegistroRefeicao registroRefeicao)
         {
             var colaborador = await _context.Colaboradores.FindAsync(registroRefeicao.ColaboradorId);
             if (colaborador == null)
@@ -64,7 +94,9 @@ namespace ApiRefeicoes.Controllers
             _context.RegistroRefeicoes.Add(registroRefeicao);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction("GetRegistroRefeicao", new { id = registroRefeicao.Id }, registroRefeicao);
+            // Retorna o objeto criado, mas sem causar referência circular na resposta
+            var response = new { id = registroRefeicao.Id };
+            return CreatedAtAction(nameof(GetRegistroRefeicao), response, response);
         }
 
         // DELETE: api/Refeicoes/5

@@ -1,5 +1,5 @@
 ﻿using ApiRefeicoes.Models;
-using Microsoft.Extensions.Configuration; // Adicionar este using
+using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System;
 using System.IdentityModel.Tokens.Jwt;
@@ -10,27 +10,23 @@ namespace ApiRefeicoes.Services
 {
     public static class TokenService
     {
-        // Modificamos o método para receber IConfiguration
         public static string GenerateToken(Usuario user, IConfiguration configuration)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
-            // Lendo a chave do appsettings.json para mais segurança
             var key = Encoding.ASCII.GetBytes(configuration["Jwt:Key"]);
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity(new[]
+                Subject = new ClaimsIdentity(new Claim[]
                 {
-                    // Adiciona o nome de usuário (essencial para o 'Olá, @User.Identity.Name!')
-                    new Claim(ClaimTypes.Name, user.Username),
-
-                    // --- ESTA É A CORREÇÃO CRÍTICA E FINAL ---
-                    // Adiciona o perfil (Role) do usuário ao token.
-                    new Claim(ClaimTypes.Role, user.Role)
+                    new Claim(ClaimTypes.Name, user.Username.ToString()),
+                    // CORREÇÃO: Garante que a permissão (Role) seja adicionada ao token.
+                    new Claim(ClaimTypes.Role, user.Role.ToString())
                 }),
-                Expires = DateTime.UtcNow.AddHours(8),
+                Expires = DateTime.UtcNow.AddHours(double.Parse(configuration["Jwt:HoursToExpire"] ?? "8")),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };
+
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
         }
