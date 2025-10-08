@@ -25,10 +25,16 @@ namespace ApiRefeicoes.Controllers
             _logger = logger;
         }
 
+        // --- MÉTODO ATUALIZADO PARA ACEITAR FILTROS E ORDENAÇÃO ---
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<ColaboradorResponseDto>>> GetColaboradores()
+        public async Task<ActionResult<IEnumerable<ColaboradorResponseDto>>> GetColaboradores(
+            [FromQuery] string? searchString,
+            [FromQuery] int? departamentoId,
+            [FromQuery] int? funcaoId,
+            [FromQuery] string? sortOrder)
         {
-            var colaboradores = await _colaboradorService.GetAllColaboradoresAsync();
+            // A requisição agora passa os parâmetros de filtro para a camada de serviço
+            var colaboradores = await _colaboradorService.GetAllColaboradoresAsync(searchString, departamentoId, funcaoId, sortOrder);
             return Ok(colaboradores);
         }
 
@@ -49,7 +55,6 @@ namespace ApiRefeicoes.Controllers
             _logger.LogInformation("Recebida requisição para ATUALIZAR colaborador ID: {Id}", id);
             try
             {
-                // A lógica de update pode ser ajustada da mesma forma se necessário
                 using var stream = imagem?.OpenReadStream();
                 var colaboradorAtualizado = await _colaboradorService.UpdateColaboradorAsync(id, colaboradorDto, stream);
 
@@ -69,12 +74,10 @@ namespace ApiRefeicoes.Controllers
             }
         }
 
-
         [HttpPost]
         public async Task<ActionResult<ColaboradorResponseDto>> PostColaborador([FromForm] CreateColaboradorDto colaboradorDto, IFormFile imagem)
         {
             _logger.LogInformation("--- INICIANDO CADASTRO DE COLABORADOR ---");
-            // Logs...
 
             if (imagem == null || imagem.Length == 0)
             {
@@ -83,8 +86,6 @@ namespace ApiRefeicoes.Controllers
 
             try
             {
-                // --- INÍCIO DA CORREÇÃO DEFINITIVA ---
-                // 1. Lê a imagem para um array de bytes UMA ÚNICA VEZ.
                 byte[] imagemBytes;
                 using (var memoryStream = new MemoryStream())
                 {
@@ -92,13 +93,11 @@ namespace ApiRefeicoes.Controllers
                     imagemBytes = memoryStream.ToArray();
                 }
 
-                // 2. Passa o array de bytes para o serviço.
                 _logger.LogInformation("Chamando o serviço IColaboradorService para criar o colaborador...");
                 var novoColaborador = await _colaboradorService.CreateColaboradorAsync(colaboradorDto, imagemBytes);
                 _logger.LogInformation("Colaborador criado com sucesso no serviço. Id={Id}", novoColaborador.Id);
 
                 return CreatedAtAction(nameof(GetColaborador), new { id = novoColaborador.Id }, novoColaborador);
-                // --- FIM DA CORREÇÃO DEFINITIVA ---
             }
             catch (Exception ex)
             {
