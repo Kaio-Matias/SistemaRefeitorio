@@ -11,5 +11,9 @@
         public byte[]? Foto { get; set; }
         public int FuncaoId { get; set; }
         public int DepartamentoId { get; set; }
+        public bool AcessoCafeDaManha { get; set; } = false;
+        public bool AcessoAlmoco { get; set; } = false;
+        public bool AcessoJanta { get; set; } = false;
+        public bool AcessoCeia { get; set; } = false;
     }
 }

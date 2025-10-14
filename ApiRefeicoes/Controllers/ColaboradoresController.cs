@@ -25,7 +25,6 @@ namespace ApiRefeicoes.Controllers
             _logger = logger;
         }
 
-        // --- MÉTODO ATUALIZADO PARA ACEITAR FILTROS E ORDENAÇÃO ---
         [HttpGet]
         public async Task<ActionResult<IEnumerable<ColaboradorResponseDto>>> GetColaboradores(
             [FromQuery] string? searchString,
@@ -33,7 +32,6 @@ namespace ApiRefeicoes.Controllers
             [FromQuery] int? funcaoId,
             [FromQuery] string? sortOrder)
         {
-            // A requisição agora passa os parâmetros de filtro para a camada de serviço
             var colaboradores = await _colaboradorService.GetAllColaboradoresAsync(searchString, departamentoId, funcaoId, sortOrder);
             return Ok(colaboradores);
         }

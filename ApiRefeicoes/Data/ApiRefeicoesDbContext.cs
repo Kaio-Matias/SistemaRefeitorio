@@ -13,7 +13,7 @@ namespace ApiRefeicoes.Data
         public DbSet<Departamento> Departamentos { get; set; }
         public DbSet<Funcao> Funcoes { get; set; }
         public DbSet<Usuario> Usuarios { get; set; }
-        public DbSet<Cardapio> Cardapios { get; set; }
+       
         public DbSet<Dispositivo> Dispositivos { get; set; }
         public DbSet<ParadaDeFabrica> ParadasDeFabrica { get; set; }
         public DbSet<RegistroRefeicao> RegistroRefeicoes { get; set; }
