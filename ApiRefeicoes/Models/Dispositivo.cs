@@ -10,7 +10,7 @@ namespace ApiRefeicoes.Models
         // Identificador único gerado pelo app cliente (MAUI, por exemplo)
         public string DeviceIdentifier { get; set; }
 
-        // Nome amigável para o dispositivo, ex: "Celular de Kaio"
+     
         public string Nome { get; set; }
 
         public DateTime UltimoLogin { get; set; }
