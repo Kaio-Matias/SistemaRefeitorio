@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace ApiRefeicoes.Migrations
 {
     /// <inheritdoc />
-    public partial class inicalmigracao : Migration
+    public partial class Migracao1 : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -80,7 +80,11 @@ namespace ApiRefeicoes.Migrations
                     FuncaoId = table.Column<int>(type: "int", nullable: false),
                     DepartamentoId = table.Column<int>(type: "int", nullable: false),
                     Ativo = table.Column<bool>(type: "bit", nullable: false),
-                    PersonId = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
+                    PersonId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    AcessoCafeDaManha = table.Column<bool>(type: "bit", nullable: false),
+                    AcessoAlmoco = table.Column<bool>(type: "bit", nullable: false),
+                    AcessoJanta = table.Column<bool>(type: "bit", nullable: false),
+                    AcessoCeia = table.Column<bool>(type: "bit", nullable: false)
                 },
                 constraints: table =>
                 {

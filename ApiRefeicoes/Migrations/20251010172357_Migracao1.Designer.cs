@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ApiRefeicoes.Migrations
 {
     [DbContext(typeof(ApiRefeicoesDbContext))]
-    [Migration("20251003172228_inicalmigracao")]
-    partial class inicalmigracao
+    [Migration("20251010172357_Migracao1")]
+    partial class Migracao1
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -57,6 +57,18 @@ namespace ApiRefeicoes.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AcessoAlmoco")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("AcessoCafeDaManha")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("AcessoCeia")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("AcessoJanta")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("Ativo")
                         .HasColumnType("bit");

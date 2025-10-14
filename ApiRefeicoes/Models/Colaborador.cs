@@ -6,6 +6,7 @@ namespace ApiRefeicoes.Models
 {
     public class Colaborador
     {
+        [Key]
         public int Id { get; set; }
 
         [Required]
@@ -28,6 +29,11 @@ namespace ApiRefeicoes.Models
 
         public Guid? PersonId { get; set; }
 
-        public virtual ICollection<RegistroRefeicao> RegistrosRefeicoes { get; set; } = new List<RegistroRefeicao>();
+        public bool AcessoCafeDaManha { get; set; } = false;
+        public bool AcessoAlmoco { get; set; } = false;
+        public bool AcessoJanta { get; set; } = false;
+        public bool AcessoCeia { get; set; } = false;
+
+        public ICollection<RegistroRefeicao> RegistrosRefeicoes { get; set; } = new List<RegistroRefeicao>();
     }
 }

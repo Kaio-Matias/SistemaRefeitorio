@@ -55,6 +55,18 @@ namespace ApiRefeicoes.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("AcessoAlmoco")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("AcessoCafeDaManha")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("AcessoCeia")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("AcessoJanta")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("Ativo")
                         .HasColumnType("bit");
 
