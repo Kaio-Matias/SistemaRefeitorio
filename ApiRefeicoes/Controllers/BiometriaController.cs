@@ -1,13 +1,10 @@
-﻿// ApiRefeicoes/Controllers/BiometriaController.cs
-using ApiRefeicoes.Data;
+﻿using ApiRefeicoes.Data;
 using ApiRefeicoes.Models;
+using ControliD; // Namespace correto que você descobriu
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
-using CIDBio; // Adicione o using para o SDK do iDBIO
+using static ControliD.CIDBio; // Permite usar 'RetCode.SUCCESS' diretamente
 
 namespace ApiRefeicoes.Controllers
 {
@@ -72,18 +69,27 @@ namespace ApiRefeicoes.Controllers
             // É crucial que a DLL `libcidbio.dll` esteja presente junto com a aplicação.
             try
             {
-                CIDBio.Init(); // Inicializa a biblioteca para usar a função de match
+                CIDBio.Init(); // Inicializa a biblioteca (Método Estático)
+
+                // --- INÍCIO DA CORREÇÃO (CS0120) ---
+                // 1. Crie uma instância (objeto) da classe CIDBio
+                CIDBio bioMatcher = new CIDBio();
+                // --- FIM DA CORREÇÃO ---
 
                 foreach (var colaborador in colaboradoresComBiometria)
                 {
                     string templateCadastradoBase64 = Convert.ToBase64String(colaborador.BiometriaTemplate);
 
-                    // Utiliza a função MatchTemplates do SDK
-                    var ret = CIDBio.MatchTemplates(templateParaIdentificarBase64, templateCadastradoBase64, out int score);
+                    // --- INÍCIO DA CORREÇÃO (CS0120) ---
+                    // 2. Chame MatchTemplates a partir da instância "bioMatcher"
+                    var ret = bioMatcher.MatchTemplates(templateParaIdentificarBase64, templateCadastradoBase64, out int score);
+                    // --- FIM DA CORREÇÃO ---
 
                     // A documentação define um "THRESHOLD" (limiar de semelhança).
                     // O valor padrão é automático, mas um valor comum é por volta de 8000-10000.
                     // Você pode precisar ajustar este valor.
+
+                    // (Esta linha funciona por causa do 'using static ...')
                     if (ret == RetCode.SUCCESS && score > 8000)
                     {
                         colaboradorIdentificado = colaborador;
@@ -98,7 +104,7 @@ namespace ApiRefeicoes.Controllers
             }
             finally
             {
-                CIDBio.Terminate(); // Garante que a biblioteca seja finalizada
+                CIDBio.Terminate(); // Garante que a biblioteca seja finalizada (Método Estático)
             }
             // --- Fim da Lógica de Comparação ---
 
@@ -123,7 +129,7 @@ namespace ApiRefeicoes.Controllers
                 NomeDepartamento = colaboradorCompleto.Departamento?.Nome ?? "N/A",
                 DepartamentoGenerico = colaboradorCompleto.Departamento?.DepartamentoGenerico,
                 NomeFuncao = colaboradorCompleto.Funcao?.Nome ?? "N/A",
-                ValorRefeicao = 17,
+                ValorRefeicao = 17, // Valor fixo, considere buscar de uma configuração
                 ParadaDeFabrica = false
             };
 
