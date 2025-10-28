@@ -11,13 +11,14 @@ using System.IO;
 
 namespace ApiRefeicoes.Controllers
 {
-    [Authorize]
+  
     [Route("api/[controller]")]
     [ApiController]
     public class ColaboradoresController : ControllerBase
     {
         private readonly IColaboradorService _colaboradorService;
         private readonly ILogger<ColaboradoresController> _logger;
+        private const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
 
         public ColaboradoresController(IColaboradorService colaboradorService, ILogger<ColaboradoresController> logger)
         {
@@ -48,9 +49,17 @@ namespace ApiRefeicoes.Controllers
         }
 
         [HttpPut("{id}")]
+        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins podem atualizar
         public async Task<IActionResult> PutColaborador(int id, [FromForm] UpdateColaboradorDto colaboradorDto, IFormFile? imagem)
         {
             _logger.LogInformation("Recebida requisição para ATUALIZAR colaborador ID: {Id}", id);
+
+            // ADICIONADO - Verificação de tamanho de arquivo
+            if (imagem != null && imagem.Length > MaxFileSize)
+            {
+                return BadRequest($"A imagem não pode exceder {MaxFileSize / 1024 / 1024} MB.");
+            }
+
             try
             {
                 using var stream = imagem?.OpenReadStream();
@@ -73,6 +82,7 @@ namespace ApiRefeicoes.Controllers
         }
 
         [HttpPost]
+        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins podem criar
         public async Task<ActionResult<ColaboradorResponseDto>> PostColaborador([FromForm] CreateColaboradorDto colaboradorDto, IFormFile imagem)
         {
             _logger.LogInformation("--- INICIANDO CADASTRO DE COLABORADOR ---");
@@ -80,6 +90,12 @@ namespace ApiRefeicoes.Controllers
             if (imagem == null || imagem.Length == 0)
             {
                 return BadRequest("A imagem do colaborador é obrigatória.");
+            }
+
+            // ADICIONADO - Verificação de tamanho de arquivo
+            if (imagem.Length > MaxFileSize)
+            {
+                return BadRequest($"A imagem não pode exceder {MaxFileSize / 1024 / 1024} MB.");
             }
 
             try

@@ -2,11 +2,13 @@
 using Microsoft.EntityFrameworkCore;
 using ApiRefeicoes.Data;
 using ApiRefeicoes.Models;
+using Microsoft.AspNetCore.Authorization; // ADICIONADO
 
 namespace ApiRefeicoes.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize] // ADICIONADO - Protege o controlador (usuários logados podem ler)
     public class FuncoesController : ControllerBase
     {
         private readonly ApiRefeicoesDbContext _context;
@@ -39,6 +41,7 @@ namespace ApiRefeicoes.Controllers
 
         // POST: api/Funcoes
         [HttpPost]
+        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins podem criar
         public async Task<ActionResult<Funcao>> PostFuncao(Funcao funcao)
         {
             _context.Funcoes.Add(funcao);
@@ -49,6 +52,7 @@ namespace ApiRefeicoes.Controllers
 
         // PUT: api/Funcoes/5
         [HttpPut("{id}")]
+        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins podem atualizar
         public async Task<IActionResult> PutFuncao(int id, Funcao funcao)
         {
             if (id != funcao.Id)
@@ -79,6 +83,7 @@ namespace ApiRefeicoes.Controllers
 
         // DELETE: api/Funcoes/5
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins podem deletar
         public async Task<IActionResult> DeleteFuncao(int id)
         {
             var funcao = await _context.Funcoes.FindAsync(id);

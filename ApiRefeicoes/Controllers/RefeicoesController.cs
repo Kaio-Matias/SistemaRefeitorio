@@ -101,6 +101,7 @@ namespace ApiRefeicoes.Controllers
 
         // DELETE: api/Refeicoes/5
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins podem deletar
         public async Task<IActionResult> DeleteRegistroRefeicao(int id)
         {
             var registroRefeicao = await _context.RegistroRefeicoes.FindAsync(id);

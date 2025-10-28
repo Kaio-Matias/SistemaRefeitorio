@@ -6,11 +6,13 @@ using System.IO;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Authorization; // ADICIONADO
 
 namespace ApiRefeicoes.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize(Roles = "SuperAdmin")] // ADICIONADO - Protege todo o controlador
     public class AzureDebugController : ControllerBase
     {
         private readonly FaceApiService _faceApiService;

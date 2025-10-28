@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using static ControliD.CIDBio; // Permite usar 'RetCode.SUCCESS' diretamente
+using Microsoft.Extensions.Configuration; // ADICIONADO
 
 namespace ApiRefeicoes.Controllers
 {
@@ -13,10 +14,12 @@ namespace ApiRefeicoes.Controllers
     public class BiometriaController : ControllerBase
     {
         private readonly ApiRefeicoesDbContext _context;
+        private readonly IConfiguration _configuration; // ADICIONADO
 
-        public BiometriaController(ApiRefeicoesDbContext context)
+        public BiometriaController(ApiRefeicoesDbContext context, IConfiguration configuration) // ADICIONADO
         {
             _context = context;
+            _configuration = configuration; // ADICIONADO
         }
 
         public class CadastroBiometriaRequest
@@ -120,6 +123,10 @@ namespace ApiRefeicoes.Controllers
                                                       .FirstOrDefaultAsync(c => c.Id == colaboradorIdentificado.Id);
 
             var tipoRefeicao = DeterminarTipoRefeicao();
+
+            // --- MELHORIA: Valor da Refeição via Configuração ---
+            var valorRefeicao = _configuration.GetValue<decimal>("Configuracoes:ValorRefeicaoPadrao", 17.0m);
+
             var registro = new RegistroRefeicao
             {
                 ColaboradorId = colaboradorCompleto.Id,
@@ -129,7 +136,7 @@ namespace ApiRefeicoes.Controllers
                 NomeDepartamento = colaboradorCompleto.Departamento?.Nome ?? "N/A",
                 DepartamentoGenerico = colaboradorCompleto.Departamento?.DepartamentoGenerico,
                 NomeFuncao = colaboradorCompleto.Funcao?.Nome ?? "N/A",
-                ValorRefeicao = 17, // Valor fixo, considere buscar de uma configuração
+                ValorRefeicao = valorRefeicao, // MODIFICADO - Valor lido do appsettings
                 ParadaDeFabrica = false
             };
 

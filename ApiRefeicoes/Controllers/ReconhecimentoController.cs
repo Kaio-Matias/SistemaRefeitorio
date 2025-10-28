@@ -8,6 +8,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization; // ADICIONADO
 
 namespace ApiRefeicoes.Controllers
 {
@@ -17,6 +18,7 @@ namespace ApiRefeicoes.Controllers
     {
         private readonly FaceApiService _faceApiService;
         private readonly ApiRefeicoesDbContext _context;
+        private const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
 
         public ReconhecimentoController(FaceApiService faceApiService, ApiRefeicoesDbContext context)
         {
@@ -28,11 +30,18 @@ namespace ApiRefeicoes.Controllers
         /// Identifica um colaborador a partir de uma foto, registra a refeição e mede o tempo da operação.
         /// </summary>
         [HttpPost("identificar")]
+        [AllowAnonymous] // ADICIONADO - Permite acesso anônimo (terminal)
         public async Task<IActionResult> IdentificarEVerificarTempo([FromForm] IFormFile foto)
         {
             if (foto == null || foto.Length == 0)
             {
                 return BadRequest("A foto é necessária.");
+            }
+
+            // ADICIONADO - Verificação de tamanho de arquivo
+            if (foto.Length > MaxFileSize)
+            {
+                return BadRequest($"A foto não pode exceder {MaxFileSize / 1024 / 1024} MB.");
             }
 
             var stopwatch = new Stopwatch();
@@ -105,6 +114,7 @@ namespace ApiRefeicoes.Controllers
         /// Endpoint para acionar manualmente o treinamento do grupo de pessoas no Azure.
         /// </summary>
         [HttpPost("treinar-grupo")]
+        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins
         public async Task<IActionResult> TreinarGrupo()
         {
             try
@@ -121,6 +131,7 @@ namespace ApiRefeicoes.Controllers
         /// Verifica o status atual do treinamento do PersonGroup.
         /// </summary>
         [HttpGet("status-treinamento")]
+        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins
         public async Task<IActionResult> VerificarStatusTreinamento()
         {
             try
@@ -143,11 +154,18 @@ namespace ApiRefeicoes.Controllers
         /// Verifica se duas faces pertencem à mesma pessoa.
         /// </summary>
         [HttpPost("verify")]
+        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins (endpoint de teste/depuração)
         public async Task<IActionResult> VerifyFaces([FromForm] IFormFile file1, [FromForm] IFormFile file2)
         {
             if (file1 == null || file2 == null)
             {
                 return BadRequest("Duas imagens são necessárias.");
+            }
+
+            // ADICIONADO - Verificação de tamanho de arquivo
+            if (file1.Length > MaxFileSize || file2.Length > MaxFileSize)
+            {
+                return BadRequest($"As imagens não podem exceder {MaxFileSize / 1024 / 1024} MB.");
             }
 
             using var memoryStream1 = new MemoryStream();

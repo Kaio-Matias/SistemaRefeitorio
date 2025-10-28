@@ -19,7 +19,8 @@ namespace ApiRefeicoes.Controllers
         private readonly FaceApiService _faceApiService;
         private readonly ApiRefeicoesDbContext _context;
         private readonly ILogger<IdentificacaoController> _logger;
-        private const double LimiarDeConfianca = 0.75;
+        // private const double LimiarDeConfianca = 0.75; // REMOVIDO - Lógica de verificação 1:1 não é mais usada
+        private const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
 
         public IdentificacaoController(FaceApiService faceApiService, ApiRefeicoesDbContext context, ILogger<IdentificacaoController> logger)
         {
@@ -61,27 +62,28 @@ namespace ApiRefeicoes.Controllers
             return TipoRefeicao.Ceia;
         }
 
-        private async Task<List<Colaborador>> GetColaboradoresParaRefeicaoAsync(TipoRefeicao tipoRefeicao)
-        {
-            var query = _context.Colaboradores.Where(c => c.Ativo && c.PersonId.HasValue);
+        // REMOVIDO - A lógica agora identifica primeiro e depois verifica a permissão
+        // private async Task<List<Colaborador>> GetColaboradoresParaRefeicaoAsync(TipoRefeicao tipoRefeicao) { ... }
 
+        // --- INÍCIO DA LÓGICA DE VERIFICAÇÃO DE PERMISSÃO (NOVA) ---
+        private bool ColaboradorTemPermissao(Colaborador colaborador, TipoRefeicao tipoRefeicao)
+        {
             switch (tipoRefeicao)
             {
                 case TipoRefeicao.CafeDaManha:
-                    query = query.Where(c => c.AcessoCafeDaManha);
-                    break;
+                    return colaborador.AcessoCafeDaManha;
                 case TipoRefeicao.Almoco:
-                    query = query.Where(c => c.AcessoAlmoco);
-                    break;
+                    return colaborador.AcessoAlmoco;
                 case TipoRefeicao.Janta:
-                    query = query.Where(c => c.AcessoJanta);
-                    break;
+                    return colaborador.AcessoJanta;
                 case TipoRefeicao.Ceia:
-                    query = query.Where(c => c.AcessoCeia);
-                    break;
+                    return colaborador.AcessoCeia;
+                default:
+                    return false;
             }
-            return await query.AsNoTracking().ToListAsync();
         }
+        // --- FIM DA LÓGICA DE VERIFICAÇÃO DE PERMISSÃO (NOVA) ---
+
 
         [HttpPost("registrar-ponto")]
         [AllowAnonymous]
@@ -92,56 +94,75 @@ namespace ApiRefeicoes.Controllers
                 return BadRequest(new { Sucesso = false, Mensagem = "Nenhuma imagem foi enviada." });
             }
 
+            // ADICIONADO - Verificação de tamanho de arquivo
+            if (file.Length > MaxFileSize)
+            {
+                return BadRequest(new { Sucesso = false, Mensagem = $"A imagem não pode exceder {MaxFileSize / 1024 / 1024} MB." });
+            }
+
             await using var memoryStream = new MemoryStream();
             await file.CopyToAsync(memoryStream);
             memoryStream.Position = 0;
 
-            var (faceIdTemporario, detectMessage) = await _faceApiService.DetectFaceWithFeedback(memoryStream);
+            // --- INÍCIO DA LÓGICA OTIMIZADA (1:N) ---
 
-            if (!faceIdTemporario.HasValue)
+            // Passo 1: Detectar e Identificar a face (1:N)
+            // Isso chama a API do Azure uma única vez e compara com o grupo de pessoas
+            var personId = await _faceApiService.IdentificarFaceAsync(memoryStream);
+
+            if (personId == null)
             {
-                return BadRequest(new { Sucesso = false, Mensagem = detectMessage });
+                _logger.LogWarning("IDENTIFICAÇÃO 1:N FALHOU: Nenhuma correspondência encontrada no grupo.");
+                return Unauthorized(new { Sucesso = false, Mensagem = "Colaborador não reconhecido." });
             }
 
+            _logger.LogInformation("IDENTIFICAÇÃO 1:N SUCESSO: PersonId encontrado: {PersonId}", personId);
+
+            // Passo 2: Buscar o colaborador no banco de dados local
+            var colaborador = await _context.Colaboradores
+                                    .Include(c => c.Departamento) // Inclui dados para o registro
+                                    .Include(c => c.Funcao)     // Inclui dados para o registro
+                                    .FirstOrDefaultAsync(c => c.PersonId == personId && c.Ativo);
+
+            if (colaborador == null)
+            {
+                _logger.LogError("Colaborador com PersonId {PersonId} foi encontrado no Azure, mas não existe ou está inativo no banco de dados local.", personId);
+                return NotFound(new { Sucesso = false, Mensagem = "Colaborador não encontrado no sistema." });
+            }
+
+            // Passo 3: Verificar a hora local e o tipo de refeição
             var horaLocal = GetHoraLocalBrasil();
             var tipoRefeicaoAtual = GetTipoRefeicaoAtual(horaLocal);
 
-            _logger.LogInformation("Iniciando busca para a refeição: {TipoRefeicao}", tipoRefeicaoAtual);
-            var colaboradoresCandidatos = await GetColaboradoresParaRefeicaoAsync(tipoRefeicaoAtual);
-
-            if (!colaboradoresCandidatos.Any())
+            // Passo 4: Verificar se o colaborador identificado tem permissão para esta refeição
+            if (!ColaboradorTemPermissao(colaborador, tipoRefeicaoAtual))
             {
-                _logger.LogWarning("Nenhum colaborador ativo com permissão para a refeição {TipoRefeicao}", tipoRefeicaoAtual);
-                return NotFound(new { Sucesso = false, Mensagem = "Nenhum colaborador ativo com permissão para esta refeição." });
+                _logger.LogWarning("Colaborador {Nome} (ID: {Id}) identificado, mas não possui permissão para {TipoRefeicao}.", colaborador.Nome, colaborador.Id, tipoRefeicaoAtual);
+                return Unauthorized(new { Sucesso = false, Mensagem = $"Colaborador {colaborador.Nome} não tem permissão para {tipoRefeicaoAtual}." });
             }
 
-            _logger.LogInformation("Verificando face contra {Count} colaboradores candidatos.", colaboradoresCandidatos.Count);
+            _logger.LogInformation("PERMISSÃO CONCEDIDA: Colaborador {Nome} autorizado para {TipoRefeicao}.", colaborador.Nome, tipoRefeicaoAtual);
 
-            foreach (var colaborador in colaboradoresCandidatos)
+            // Passo 5: Registrar a refeição
+            var registro = new RegistroRefeicao
             {
-                var (isIdentical, confidence) = await _faceApiService.VerifyFaceToPersonAsync(faceIdTemporario.Value, colaborador.PersonId.Value);
+                ColaboradorId = colaborador.Id,
+                DataHoraRegistro = horaLocal,
+                TipoRefeicao = tipoRefeicaoAtual.ToString(),
+                NomeColaborador = colaborador.Nome,
+                NomeDepartamento = colaborador.Departamento?.Nome ?? "N/A",
+                DepartamentoGenerico = colaborador.Departamento?.DepartamentoGenerico,
+                NomeFuncao = colaborador.Funcao?.Nome ?? "N/A",
+                ValorRefeicao = 0, // TODO: Buscar de uma configuração
+                ParadaDeFabrica = false
+            };
 
-                if (isIdentical && confidence >= LimiarDeConfianca)
-                {
-                    _logger.LogInformation("VERIFICAÇÃO BEM-SUCEDIDA: Colaborador {Nome} verificado com confiança de {Confidence}", colaborador.Nome, confidence);
+            _context.RegistroRefeicoes.Add(registro);
+            await _context.SaveChangesAsync();
 
-                    var registro = new RegistroRefeicao
-                    {
-                        ColaboradorId = colaborador.Id,
-                        DataHoraRegistro = horaLocal,
-                        TipoRefeicao = tipoRefeicaoAtual.ToString(),
-                        // Preencha aqui os outros campos do seu modelo `RegistroRefeicao`
-                    };
+            return Ok(new { Sucesso = true, Mensagem = $"{tipoRefeicaoAtual} registrada com sucesso para {colaborador.Nome}." });
 
-                    _context.RegistroRefeicoes.Add(registro);
-                    await _context.SaveChangesAsync();
-
-                    return Ok(new { Sucesso = true, Mensagem = $"{tipoRefeicaoAtual} registrada com sucesso para {colaborador.Nome}." });
-                }
-            }
-
-            _logger.LogWarning("VERIFICAÇÃO FALHOU: Nenhuma correspondência encontrada para a face detectada.");
-            return Unauthorized(new { Sucesso = false, Mensagem = "Colaborador não reconhecido ou sem permissão para esta refeição." });
+            // --- FIM DA LÓGICA OTIMIZADA (1:N) ---
         }
     }
 }
