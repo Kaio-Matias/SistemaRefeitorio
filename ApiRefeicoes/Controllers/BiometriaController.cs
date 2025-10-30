@@ -34,7 +34,7 @@ namespace ApiRefeicoes.Controllers
         }
 
         [HttpPost("cadastrar")]
-        [Authorize(Roles = "SuperAdmin")]
+        [AllowAnonymous] 
         public async Task<IActionResult> CadastrarBiometria([FromBody] CadastroBiometriaRequest request)
         {
             var colaborador = await _context.Colaboradores.FindAsync(request.ColaboradorId);
