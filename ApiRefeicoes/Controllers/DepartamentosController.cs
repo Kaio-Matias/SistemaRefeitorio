@@ -2,11 +2,13 @@
 using Microsoft.EntityFrameworkCore;
 using ApiRefeicoes.Data;
 using ApiRefeicoes.Models;
+using Microsoft.AspNetCore.Authorization; // ADICIONADO
 
 namespace ApiRefeicoes.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize] // ADICIONADO - Protege o controlador (usuários logados podem ler)
     public class DepartamentosController : ControllerBase
     {
         private readonly ApiRefeicoesDbContext _context;
@@ -39,6 +41,7 @@ namespace ApiRefeicoes.Controllers
 
         // POST: api/Departamentos
         [HttpPost]
+        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins podem criar
         public async Task<ActionResult<Departamento>> PostDepartamento(Departamento departamento)
         {
             _context.Departamentos.Add(departamento);
@@ -49,6 +52,7 @@ namespace ApiRefeicoes.Controllers
 
         // PUT: api/Departamentos/5
         [HttpPut("{id}")]
+        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins podem atualizar
         public async Task<IActionResult> PutDepartamento(int id, Departamento departamento)
         {
             if (id != departamento.Id)
@@ -79,6 +83,7 @@ namespace ApiRefeicoes.Controllers
 
         // DELETE: api/Departamentos/5
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins podem deletar
         public async Task<IActionResult> DeleteDepartamento(int id)
         {
             var departamento = await _context.Departamentos.FindAsync(id);

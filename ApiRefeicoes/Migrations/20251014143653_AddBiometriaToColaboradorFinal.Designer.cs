@@ -4,6 +4,7 @@ using ApiRefeicoes.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ApiRefeicoes.Migrations
 {
     [DbContext(typeof(ApiRefeicoesDbContext))]
-    partial class ApiRefeicoesDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251014143653_AddBiometriaToColaboradorFinal")]
+    partial class AddBiometriaToColaboradorFinal
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -45,7 +48,7 @@ namespace ApiRefeicoes.Migrations
                     b.Property<bool>("Ativo")
                         .HasColumnType("bit");
 
-                    b.Property<byte[]>("BiometriaTemplate")
+                    b.Property<byte[]>("BiometriaHash")
                         .HasColumnType("varbinary(max)");
 
                     b.Property<string>("CartaoPonto")

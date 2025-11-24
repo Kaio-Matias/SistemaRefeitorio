@@ -10,6 +10,10 @@ namespace ApiRefeicoes.Dtos
         public string? Password { get; set; }
         [Required]
         public string? Role { get; set; }
+        public bool AcessoCafeDaManha { get; set; } = false;
+        public bool AcessoAlmoco { get; set; } = false;
+        public bool AcessoJanta { get; set; } = false;
+        public bool AcessoCeia { get; set; } = false;
 
     }
 }

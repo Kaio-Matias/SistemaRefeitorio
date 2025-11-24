@@ -85,6 +85,7 @@ namespace ApiRefeicoes.Migrations
                     AcessoAlmoco = table.Column<bool>(type: "bit", nullable: false),
                     AcessoJanta = table.Column<bool>(type: "bit", nullable: false),
                     AcessoCeia = table.Column<bool>(type: "bit", nullable: false)
+                    
                 },
                 constraints: table =>
                 {
