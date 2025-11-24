@@ -50,36 +50,53 @@ namespace ApiRefeicoes.Services
             }
         }
 
-        // NOVO MÉTODO DE IDENTIFICAÇÃO (1 para N)
+        // === MÉTODO PRINCIPAL DE IDENTIFICAÇÃO (1 para N) ===
         public async Task<Guid?> IdentificarFaceAsync(Stream imageStream)
         {
-            imageStream.Position = 0;
-            var detectedFaces = await _faceClient.Face.DetectWithStreamAsync(imageStream, recognitionModel: FaceApiModels.RecognitionModel, detectionModel: FaceApiModels.DetectionModel);
-            var faceIds = detectedFaces.Select(f => f.FaceId.Value).ToList();
-
-            if (!faceIds.Any())
+            try
             {
-                _logger.LogWarning("Nenhuma face detectada na imagem para identificação.");
+                imageStream.Position = 0;
+                // Passo 1: Detectar a face na imagem enviada
+                var detectedFaces = await _faceClient.Face.DetectWithStreamAsync(
+                    imageStream,
+                    recognitionModel: FaceApiModels.RecognitionModel,
+                    detectionModel: FaceApiModels.DetectionModel
+                );
+
+                var faceIds = detectedFaces.Select(f => f.FaceId.Value).ToList();
+
+                if (!faceIds.Any())
+                {
+                    _logger.LogWarning("Nenhuma face detectada na imagem para identificação.");
+                    return null;
+                }
+
+                // Passo 2: Identificar a quem pertence a face dentro do PersonGroup
+                var identifyResults = await _faceClient.Face.IdentifyAsync(faceIds, _personGroupId);
+
+                foreach (var result in identifyResults)
+                {
+                    if (result.Candidates.Any())
+                    {
+                        // Pega o candidato com maior confiança
+                        var bestCandidate = result.Candidates.OrderByDescending(c => c.Confidence).First();
+                        _logger.LogInformation("Face identificada como PersonId {PersonId} com confiança {Confidence}", bestCandidate.PersonId, bestCandidate.Confidence);
+                        return bestCandidate.PersonId;
+                    }
+                }
+
+                _logger.LogWarning("Face detectada, mas não corresponde a nenhum colaborador no grupo (Desconhecido).");
                 return null;
             }
-
-            var identifyResults = await _faceClient.Face.IdentifyAsync(faceIds, _personGroupId);
-
-            foreach (var result in identifyResults)
+            catch (APIErrorException ex)
             {
-                if (result.Candidates.Any())
-                {
-                    var bestCandidate = result.Candidates.OrderByDescending(c => c.Confidence).First();
-                    _logger.LogInformation("Face identificada como PersonId {PersonId} com confiança {Confidence}", bestCandidate.PersonId, bestCandidate.Confidence);
-                    return bestCandidate.PersonId;
-                }
+                _logger.LogError(ex, "Erro na API de Face durante a identificação: {Message}", ex.Body?.Error?.Message);
+                throw;
             }
-
-            _logger.LogWarning("Face detectada, mas não corresponde a nenhum colaborador no grupo.");
-            return null;
         }
 
-        // MÉTODO DE TREINAMENTO ATUALIZADO E MAIS ROBUSTO
+        // === GERENCIAMENTO E TREINAMENTO ===
+
         public async Task TrainPersonGroupAsync()
         {
             await EnsurePersonGroupExistsAsync();
@@ -105,64 +122,9 @@ namespace ApiRefeicoes.Services
             }
         }
 
-        // --- MÉTODOS ORIGINAIS MANTIDOS ---
-        public async Task<(Guid? faceId, string message)> DetectFaceWithFeedback(Stream imageStream)
+        public async Task<TrainingStatus> GetTrainingStatusAsync()
         {
-            try
-            {
-                imageStream.Position = 0;
-                var faces = await _faceClient.Face.DetectWithStreamAsync(imageStream, recognitionModel: FaceApiModels.RecognitionModel, detectionModel: FaceApiModels.DetectionModel);
-
-                if (faces.Any())
-                {
-                    var faceId = faces.First().FaceId;
-                    _logger.LogInformation("[{Timestamp}] Face detectada: {FaceId}", DateTime.UtcNow, faceId);
-                    return (faceId, "Face detectada com sucesso.");
-                }
-
-                _logger.LogWarning("[{Timestamp}] Nenhuma face detectada.", DateTime.UtcNow);
-                return (null, "Nenhuma face detectada.");
-            }
-            catch (APIErrorException ex)
-            {
-                _logger.LogError(ex, "[{Timestamp}] Erro na API ao detectar face: {Message}", DateTime.UtcNow, ex.Body?.Error?.Message);
-                return (null, $"Erro na API: {ex.Body?.Error?.Message}");
-            }
-        }
-
-        public async Task<(bool isIdentical, double confidence)> VerifyFaces(Guid faceId1, Guid faceId2)
-        {
-            try
-            {
-                var result = await _faceClient.Face.VerifyFaceToFaceAsync(faceId1, faceId2);
-                _logger.LogInformation("[{Timestamp}] Verificação Face-a-Face concluída. Confiança: {Confidence}", DateTime.UtcNow, result.Confidence);
-                return (result.IsIdentical, result.Confidence);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[{Timestamp}] Erro ao verificar faces.", DateTime.UtcNow);
-                return (false, 0);
-            }
-        }
-
-        public async Task<(bool isIdentical, double confidence)> VerifyFaceToPersonAsync(Guid faceId, Guid personId)
-        {
-            try
-            {
-                var result = await _faceClient.Face.VerifyFaceToPersonAsync(faceId, personId, _personGroupId);
-                _logger.LogInformation("[{Timestamp}] Verificação 1:1 (faceId x personId) concluída para PersonId {PersonId}. Confiança: {Confidence}", DateTime.UtcNow, personId, result.Confidence);
-                return (result.IsIdentical, result.Confidence);
-            }
-            catch (APIErrorException ex)
-            {
-                _logger.LogError(ex, "[{Timestamp}] Erro na API ao verificar Face-to-Person para PersonId {PersonId}: {Message}", DateTime.UtcNow, personId, ex.Body?.Error?.Message);
-                return (false, 0);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[{Timestamp}] Erro geral ao verificar Face-to-Person para PersonId {PersonId}.", DateTime.UtcNow, personId);
-                return (false, 0);
-            }
+            return await _faceClient.PersonGroup.GetTrainingStatusAsync(_personGroupId);
         }
 
         public async Task<Guid> CreatePersonAsync(string name)
@@ -183,29 +145,6 @@ namespace ApiRefeicoes.Services
             return persistedFace;
         }
 
-        public async Task<TrainingStatus> GetTrainingStatusAsync()
-        {
-            return await _faceClient.PersonGroup.GetTrainingStatusAsync(_personGroupId);
-        }
-
-        public async Task<PersonGroup> GetPersonGroupAsync()
-        {
-            _logger.LogInformation("[{Timestamp}] Obtendo detalhes do grupo '{PersonGroupId}'.", DateTime.UtcNow, _personGroupId);
-            return await _faceClient.PersonGroup.GetAsync(_personGroupId, returnRecognitionModel: true);
-        }
-
-        public async Task<Guid?> DetectFace(Stream imageStream)
-        {
-            var (faceId, _) = await DetectFaceWithFeedback(imageStream);
-            return faceId;
-        }
-
-        public async Task<string> DetectFaceAndGetId(Stream imageStream)
-        {
-            var (faceId, _) = await DetectFaceWithFeedback(imageStream);
-            return faceId?.ToString();
-        }
-
         public async Task DeletePersonGroupAsync()
         {
             try
@@ -217,6 +156,36 @@ namespace ApiRefeicoes.Services
             {
                 _logger.LogWarning("[{Timestamp}] Tentativa de apagar grupo '{PersonGroupId}', mas ele não foi encontrado.", DateTime.UtcNow, _personGroupId);
             }
+        }
+
+        // Útil para validar se há face antes de tentar cadastrar, mantido como utilitário
+        public async Task<(Guid? faceId, string message)> DetectFaceWithFeedback(Stream imageStream)
+        {
+            try
+            {
+                imageStream.Position = 0;
+                var faces = await _faceClient.Face.DetectWithStreamAsync(imageStream, recognitionModel: FaceApiModels.RecognitionModel, detectionModel: FaceApiModels.DetectionModel);
+
+                if (faces.Any())
+                {
+                    var faceId = faces.First().FaceId;
+                    return (faceId, "Face detectada com sucesso.");
+                }
+
+                return (null, "Nenhuma face detectada.");
+            }
+            catch (APIErrorException ex)
+            {
+                _logger.LogError(ex, "Erro na API ao detectar face.");
+                return (null, $"Erro na API: {ex.Body?.Error?.Message}");
+            }
+        }
+        // DENTRO DE FaceApiService.cs
+
+        public async Task<PersonGroup> GetPersonGroupAsync()
+        {
+            _logger.LogInformation("[{Timestamp}] Obtendo detalhes do grupo '{PersonGroupId}'.", DateTime.UtcNow, _personGroupId);
+            return await _faceClient.PersonGroup.GetAsync(_personGroupId, returnRecognitionModel: true);
         }
     }
 }

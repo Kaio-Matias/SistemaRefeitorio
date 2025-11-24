@@ -33,7 +33,6 @@ namespace ApiRefeicoes.Models
         public bool AcessoAlmoco { get; set; } = false;
         public bool AcessoJanta { get; set; } = false;
         public bool AcessoCeia { get; set; } = false;
-        public byte[]? BiometriaTemplate { get; set; }
         public string? DeviceIdentifier { get; set; }
 
         public ICollection<RegistroRefeicao> RegistrosRefeicoes { get; set; } = new List<RegistroRefeicao>();

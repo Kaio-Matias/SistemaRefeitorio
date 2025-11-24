@@ -8,7 +8,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authorization; // ADICIONADO
+using Microsoft.AspNetCore.Authorization;
 
 namespace ApiRefeicoes.Controllers
 {
@@ -30,7 +30,7 @@ namespace ApiRefeicoes.Controllers
         /// Identifica um colaborador a partir de uma foto, registra a refeição e mede o tempo da operação.
         /// </summary>
         [HttpPost("identificar")]
-        [AllowAnonymous] // ADICIONADO - Permite acesso anônimo (terminal)
+        [AllowAnonymous]
         public async Task<IActionResult> IdentificarEVerificarTempo([FromForm] IFormFile foto)
         {
             if (foto == null || foto.Length == 0)
@@ -38,7 +38,6 @@ namespace ApiRefeicoes.Controllers
                 return BadRequest("A foto é necessária.");
             }
 
-            // ADICIONADO - Verificação de tamanho de arquivo
             if (foto.Length > MaxFileSize)
             {
                 return BadRequest($"A foto não pode exceder {MaxFileSize / 1024 / 1024} MB.");
@@ -53,6 +52,7 @@ namespace ApiRefeicoes.Controllers
                 await foto.CopyToAsync(memoryStream);
                 memoryStream.Position = 0;
 
+                // Usa o método 1:N atualizado
                 var personId = await _faceApiService.IdentificarFaceAsync(memoryStream);
 
                 if (personId == null)
@@ -72,6 +72,7 @@ namespace ApiRefeicoes.Controllers
                     return NotFound(new { message = "Colaborador encontrado no Azure, mas não no banco de dados local.", tempoDecorridoMs = stopwatch.ElapsedMilliseconds });
                 }
 
+                // Cria registro simples para teste de performance
                 var registroRefeicao = new RegistroRefeicao
                 {
                     ColaboradorId = colaborador.Id,
@@ -79,9 +80,9 @@ namespace ApiRefeicoes.Controllers
                     NomeColaborador = colaborador.Nome,
                     NomeDepartamento = colaborador.Departamento?.Nome,
                     NomeFuncao = colaborador.Funcao?.Nome,
-                    TipoRefeicao = "Almoço", // Valor Padrão
-                    ValorRefeicao = 0,     // Valor Padrão
-                    ParadaDeFabrica = false // Valor Padrão
+                    TipoRefeicao = "Almoço", // Padrão para este endpoint de teste
+                    ValorRefeicao = 0,
+                    ParadaDeFabrica = false
                 };
                 _context.RegistroRefeicoes.Add(registroRefeicao);
                 await _context.SaveChangesAsync();
@@ -114,7 +115,7 @@ namespace ApiRefeicoes.Controllers
         /// Endpoint para acionar manualmente o treinamento do grupo de pessoas no Azure.
         /// </summary>
         [HttpPost("treinar-grupo")]
-        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> TreinarGrupo()
         {
             try
@@ -127,11 +128,12 @@ namespace ApiRefeicoes.Controllers
                 return StatusCode(500, $"Ocorreu um erro ao treinar o grupo: {ex.Message}");
             }
         }
+
         /// <summary>
         /// Verifica o status atual do treinamento do PersonGroup.
         /// </summary>
         [HttpGet("status-treinamento")]
-        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> VerificarStatusTreinamento()
         {
             try
@@ -150,46 +152,7 @@ namespace ApiRefeicoes.Controllers
                 return StatusCode(500, $"Ocorreu um erro ao verificar o status: {ex.Message}");
             }
         }
-        /// <summary>
-        /// Verifica se duas faces pertencem à mesma pessoa.
-        /// </summary>
-        [HttpPost("verify")]
-        [Authorize(Roles = "Admin")] // ADICIONADO - Apenas Admins (endpoint de teste/depuração)
-        public async Task<IActionResult> VerifyFaces([FromForm] IFormFile file1, [FromForm] IFormFile file2)
-        {
-            if (file1 == null || file2 == null)
-            {
-                return BadRequest("Duas imagens são necessárias.");
-            }
 
-            // ADICIONADO - Verificação de tamanho de arquivo
-            if (file1.Length > MaxFileSize || file2.Length > MaxFileSize)
-            {
-                return BadRequest($"As imagens não podem exceder {MaxFileSize / 1024 / 1024} MB.");
-            }
-
-            using var memoryStream1 = new MemoryStream();
-            await file1.CopyToAsync(memoryStream1);
-
-            using var memoryStream2 = new MemoryStream();
-            await file2.CopyToAsync(memoryStream2);
-
-            var faceId1Str = await _faceApiService.DetectFaceAndGetId(memoryStream1);
-            var faceId2Str = await _faceApiService.DetectFaceAndGetId(memoryStream2);
-
-            if (string.IsNullOrEmpty(faceId1Str) || string.IsNullOrEmpty(faceId2Str))
-            {
-                return BadRequest("Não foi possível detectar faces em uma ou ambas as imagens.");
-            }
-
-            if (!Guid.TryParse(faceId1Str, out Guid faceId1Guid) || !Guid.TryParse(faceId2Str, out Guid faceId2Guid))
-            {
-                return BadRequest("Os IDs de face retornados não são válidos.");
-            }
-
-            var (isIdentical, confidence) = await _faceApiService.VerifyFaces(faceId1Guid, faceId2Guid);
-
-            return Ok(new { isIdentical, confidence });
-        }
+        // O endpoint "verify" (1:1) foi REMOVIDO para corrigir os erros CS1061 e CS8130
     }
 }

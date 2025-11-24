@@ -1,29 +1,39 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using ApiRefeicoes.Services;
+using ApiRefeicoes.Data;
 using Microsoft.Azure.CognitiveServices.Vision.Face.Models;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Authorization;
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
-using Microsoft.AspNetCore.Authorization; // ADICIONADO
 
 namespace ApiRefeicoes.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = "SuperAdmin")] // ADICIONADO - Protege todo o controlador
+    [Authorize(Roles = "SuperAdmin")] // Garante que apenas Super Admins acessem essas ferramentas perigosas
     public class AzureDebugController : ControllerBase
     {
         private readonly FaceApiService _faceApiService;
+        private readonly ApiRefeicoesDbContext _context;
         private readonly ILogger<AzureDebugController> _logger;
 
-        public AzureDebugController(FaceApiService faceApiService, ILogger<AzureDebugController> logger)
+        public AzureDebugController(
+            FaceApiService faceApiService,
+            ApiRefeicoesDbContext context,
+            ILogger<AzureDebugController> logger)
         {
             _faceApiService = faceApiService;
+            _context = context;
             _logger = logger;
         }
 
+        /// <summary>
+        /// Verifica o status do último treinamento.
+        /// </summary>
         [HttpGet("training-status")]
         public async Task<ActionResult<object>> GetTrainingStatus()
         {
@@ -41,70 +51,135 @@ namespace ApiRefeicoes.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erro inesperado ao verificar o estado do treino.");
-                return StatusCode(500, "Ocorreu um erro interno. Verifique os logs do servidor.");
+                return StatusCode(500, new { Message = "Erro ao verificar status.", Details = ex.Message });
             }
         }
 
+        /// <summary>
+        /// Obtém detalhes técnicos do PersonGroup no Azure.
+        /// </summary>
         [HttpGet("group-details")]
-        public async Task<ActionResult<object>> GetGroupDetails()
+        public async Task<IActionResult> GetGroupDetails()
         {
             try
             {
                 var group = await _faceApiService.GetPersonGroupAsync();
-                return Ok(new
-                {
-                    group.PersonGroupId,
-                    group.Name,
-                    group.RecognitionModel,
-                    group.UserData
-                });
+                return Ok(group);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erro ao obter detalhes do grupo.");
-                return StatusCode(500, new { Message = "Ocorreu um erro ao obter detalhes do grupo.", Details = ex.Message });
+                return StatusCode(500, new { Message = "Erro ao obter detalhes do grupo.", Details = ex.Message });
             }
         }
 
-        [HttpGet("force-train")]
+        /// <summary>
+        /// Força o treinamento manual do grupo.
+        /// </summary>
+        [HttpPost("force-train")]
         public async Task<IActionResult> ForceTrain()
         {
             try
             {
-                _logger.LogInformation("A forçar o treino do grupo de pessoas manualmente.");
+                _logger.LogInformation("Forçando o treino do grupo manualmente.");
                 await _faceApiService.TrainPersonGroupAsync();
-                return Ok(new { Message = "Comando de treino enviado com sucesso. Verifique o estado em alguns segundos." });
+                return Ok(new { Message = "Treino iniciado e concluído com sucesso." });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erro ao forçar o treino.");
-                return StatusCode(500, new { Message = "Ocorreu um erro ao tentar iniciar o treino.", Details = ex.Message });
+                return StatusCode(500, new { Message = "Erro ao treinar.", Details = ex.Message });
             }
         }
 
-        // --- INÍCIO DA CORREÇÃO ---
-        [HttpGet("hard-reset")]
-        public async Task<IActionResult> HardReset()
+        /// <summary>
+        /// ROTINA DE CURA: Apaga tudo no Azure e recadastra baseada no Banco de Dados local.
+        /// Resolve o erro "PersonId existe no Azure mas não no banco local".
+        /// </summary>
+        [HttpPost("sincronizar-total")]
+        [AllowAnonymous]
+        public async Task<IActionResult> SincronizarBaseTotal()
         {
+            // AVISO: Esta operação pode demorar. Não feche a conexão.
             try
             {
-                _logger.LogWarning("!!! INICIANDO HARD RESET DO PERSON GROUP !!!");
+                _logger.LogWarning("!!! INICIANDO SINCRONIZAÇÃO TOTAL (DB -> AZURE) !!!");
 
-                // Passo 1: Apagar o grupo existente (se houver).
+                // 1. Resetar o ambiente no Azure (Apagar e Recriar Grupo)
+                // Isso garante que não existam IDs "fantasmas" no Azure.
                 await _faceApiService.DeletePersonGroupAsync();
-
-                // Passo 2: Chamar EnsurePersonGroupExistsAsync que agora contém a lógica de criação correta.
                 await _faceApiService.EnsurePersonGroupExistsAsync();
 
-                _logger.LogInformation("!!! HARD RESET CONCLUÍDO. O GRUPO FOI APAGADO E RECRIADO. !!!");
-                return Ok(new { Message = "Hard Reset concluído. O grupo 'colaboradores' foi apagado e recriado. Por favor, cadastre um novo colaborador para iniciar o treino." });
+                // 2. Buscar todos os colaboradores ativos do banco local
+                var colaboradores = await _context.Colaboradores
+                                                  .Where(c => c.Ativo)
+                                                  .ToListAsync();
+
+                _logger.LogInformation($"Iniciando processamento de {colaboradores.Count} colaboradores.");
+
+                int sucessos = 0;
+                int erros = 0;
+                int semFoto = 0;
+
+                foreach (var colab in colaboradores)
+                {
+                    try
+                    {
+                        // 3. Criar a pessoa no Azure (Gera um NOVO PersonId)
+                        var novoPersonId = await _faceApiService.CreatePersonAsync(colab.Nome);
+
+                        // 4. Atualizar o PersonId no objeto local
+                        colab.PersonId = novoPersonId;
+
+                        // 5. Enviar a foto para o Azure (se existir)
+                        if (colab.Foto != null && colab.Foto.Length > 0)
+                        {
+                            using (var stream = new MemoryStream(colab.Foto))
+                            {
+                                await _faceApiService.AddFaceToPersonAsync(novoPersonId, stream);
+                            }
+                            sucessos++;
+                        }
+                        else
+                        {
+                            _logger.LogWarning($"Colaborador {colab.Nome} (ID {colab.Id}) não possui foto. Criado no Azure apenas com nome.");
+                            semFoto++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, ($"Erro ao sincronizar colaborador {colab.Nome} (ID {colab.Id})."));
+                        erros++;
+                        // Não para o loop, tenta o próximo
+                    }
+                }
+
+                // 6. Salvar todos os novos PersonIds no banco de dados local
+                await _context.SaveChangesAsync();
+
+                // 7. Treinar o grupo com os novos dados
+                if (sucessos > 0)
+                {
+                    await _faceApiService.TrainPersonGroupAsync();
+                }
+
+                var resumo = new
+                {
+                    Mensagem = "Sincronização concluída com sucesso.",
+                    TotalProcessado = colaboradores.Count,
+                    CadastradosComFoto = sucessos,
+                    CadastradosSemFoto = semFoto,
+                    Falhas = erros,
+                    Nota = "Os PersonIds no banco de dados foram atualizados. O reconhecimento deve funcionar agora."
+                };
+
+                _logger.LogInformation("Sincronização finalizada. {@Resumo}", resumo);
+
+                return Ok(resumo);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erro durante o Hard Reset.");
-                return StatusCode(500, new { Message = "Ocorreu um erro durante o Hard Reset.", Details = ex.Message });
+                _logger.LogError(ex, "Erro fatal durante a sincronização total.");
+                return StatusCode(500, new { Mensagem = "Erro fatal na sincronização.", Detalhes = ex.Message });
             }
         }
-        // --- FIM DA CORREÇÃO ---
     }
 }

@@ -9,14 +9,8 @@ END;
 GO
 
 BEGIN TRANSACTION;
-CREATE TABLE [Cardapios] (
-    [Id] int NOT NULL IDENTITY,
-    [NomeArquivo] nvarchar(255) NOT NULL,
-    [CaminhoArquivo] nvarchar(max) NOT NULL,
-    [DataUpload] datetime2 NOT NULL,
-    CONSTRAINT [PK_Cardapios] PRIMARY KEY ([Id])
-);
 
+-- Tabelas Auxiliares
 CREATE TABLE [Departamentos] (
     [Id] int NOT NULL IDENTITY,
     [Nome] nvarchar(100) NOT NULL,
@@ -27,7 +21,7 @@ CREATE TABLE [Departamentos] (
 CREATE TABLE [Funcoes] (
     [Id] int NOT NULL IDENTITY,
     [Nome] nvarchar(100) NOT NULL,
-    CONSTRAINT [PK_Funcoes] PRIMARY KEY ([Id])
+    [CONSTRAINT] [PK_Funcoes] PRIMARY KEY ([Id])
 );
 
 CREATE TABLE [Usuarios] (
@@ -38,6 +32,7 @@ CREATE TABLE [Usuarios] (
     CONSTRAINT [PK_Usuarios] PRIMARY KEY ([Id])
 );
 
+-- Tabela Colaboradores (SEM BIOMETRIA)
 CREATE TABLE [Colaboradores] (
     [Id] int NOT NULL IDENTITY,
     [Nome] nvarchar(100) NOT NULL,
@@ -51,7 +46,7 @@ CREATE TABLE [Colaboradores] (
     [AcessoAlmoco] bit NOT NULL,
     [AcessoJanta] bit NOT NULL,
     [AcessoCeia] bit NOT NULL,
-    [BiometriaHash] varbinary(max) NULL,
+    -- [Biometria] Removido conforme solicitado
     [DeviceIdentifier] nvarchar(max) NULL,
     CONSTRAINT [PK_Colaboradores] PRIMARY KEY ([Id]),
     CONSTRAINT [FK_Colaboradores_Departamentos_DepartamentoId] FOREIGN KEY ([DepartamentoId]) REFERENCES [Departamentos] ([Id]) ON DELETE CASCADE,
@@ -78,6 +73,7 @@ CREATE TABLE [ParadasDeFabrica] (
     CONSTRAINT [FK_ParadasDeFabrica_Usuarios_UsuarioId] FOREIGN KEY ([UsuarioId]) REFERENCES [Usuarios] ([Id])
 );
 
+-- Tabela RegistroRefeicoes (COM CAMPO RefeicaoExcedente)
 CREATE TABLE [RegistroRefeicoes] (
     [Id] int NOT NULL IDENTITY,
     [ColaboradorId] int NOT NULL,
@@ -89,32 +85,17 @@ CREATE TABLE [RegistroRefeicoes] (
     [NomeFuncao] nvarchar(100) NOT NULL,
     [ValorRefeicao] decimal(18,2) NOT NULL,
     [ParadaDeFabrica] bit NOT NULL,
+    [RefeicaoExcedente] bit NOT NULL DEFAULT 0, -- Campo Novo
     CONSTRAINT [PK_RegistroRefeicoes] PRIMARY KEY ([Id]),
     CONSTRAINT [FK_RegistroRefeicoes_Colaboradores_ColaboradorId] FOREIGN KEY ([ColaboradorId]) REFERENCES [Colaboradores] ([Id]) ON DELETE CASCADE
 );
 
+-- Índices
 CREATE INDEX [IX_Colaboradores_DepartamentoId] ON [Colaboradores] ([DepartamentoId]);
-
 CREATE INDEX [IX_Colaboradores_FuncaoId] ON [Colaboradores] ([FuncaoId]);
-
 CREATE INDEX [IX_Dispositivos_UsuarioId] ON [Dispositivos] ([UsuarioId]);
-
 CREATE INDEX [IX_ParadasDeFabrica_UsuarioId] ON [ParadasDeFabrica] ([UsuarioId]);
-
 CREATE INDEX [IX_RegistroRefeicoes_ColaboradorId] ON [RegistroRefeicoes] ([ColaboradorId]);
-
-INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-VALUES (N'20251010172357_Migracao1', N'9.0.9');
-
-DROP TABLE [Cardapios];
-
-ALTER TABLE [Colaboradores] ADD [BiometriaHash] varbinary(max) NULL;
-
-ALTER TABLE [Colaboradores] ADD [DeviceIdentifier] nvarchar(max) NULL;
-
-INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-VALUES (N'20251014143653_AddBiometriaToColaboradorFinal', N'9.0.9');
 
 COMMIT;
 GO
-
