@@ -35,22 +35,20 @@ namespace ApiRefeicoes.Controllers
             _configuration = configuration;
         }
 
-        private enum TipoRefeicao { CafeDaManha, Almoco, Janta, Ceia }
+        private enum TipoRefeicao { Café_da_Manha, Almoço, Janta, Ceia }
 
-        // Método auxiliar para determinar o tipo de refeição com base na hora informada
         private TipoRefeicao GetTipoRefeicaoAtual(DateTime horaRegistro)
         {
             var hora = horaRegistro.Hour;
-            if (hora >= 6 && hora < 11) return TipoRefeicao.CafeDaManha;
-            if (hora >= 11 && hora < 18) return TipoRefeicao.Almoco;
-            if (hora >= 18 && hora < 22) return TipoRefeicao.Janta;
+            // Ajuste os horários conforme sua regra de negócio
+            if (hora >= 4 && hora < 10) return TipoRefeicao.Café_da_Manha;
+            if (hora >= 10 && hora < 15) return TipoRefeicao.Almoço;
+            if (hora >= 15 && hora < 22) return TipoRefeicao.Janta;
             return TipoRefeicao.Ceia;
         }
 
         [HttpPost("registrar-ponto")]
         [AllowAnonymous]
-        // Adicionado o parâmetro [FromForm] DateTime? dataHora para receber do dispositivo
-        // Se não vier, usamos o fallback para o servidor (DateTime.UtcNow) mas o ideal é o app sempre mandar.
         public async Task<IActionResult> RegistrarPonto(IFormFile file, [FromForm] DateTime? dataHora)
         {
             if (file == null || file.Length == 0)
@@ -59,9 +57,17 @@ namespace ApiRefeicoes.Controllers
             if (file.Length > MaxFileSize)
                 return BadRequest(new { Sucesso = false, Mensagem = $"A imagem excede o limite de {MaxFileSize / 1024 / 1024} MB." });
 
+            // Variável para armazenar os bytes da foto
+            byte[] fotoBytes;
+
             await using var memoryStream = new MemoryStream();
             await file.CopyToAsync(memoryStream);
-            memoryStream.Position = 0;
+
+            // --- NOVO: CAPTURA OS BYTES PARA SALVAR NO BANCO ---
+            fotoBytes = memoryStream.ToArray();
+            // ---------------------------------------------------
+
+            memoryStream.Position = 0; // Reseta posição para o Azure ler
 
             // --- PASSO 1: IDENTIFICAÇÃO (1:N) ---
             var personId = await _faceApiService.IdentificarFaceAsync(memoryStream);
@@ -84,9 +90,7 @@ namespace ApiRefeicoes.Controllers
                 return NotFound(new { Sucesso = false, Mensagem = "Cadastro local não encontrado." });
             }
 
-            // --- PASSO 3: REGRAS DE NEGÓCIO (HORÁRIO E ALERTA) ---
-
-            // Define a hora do registro: Usa a que veio do dispositivo ou pega a do servidor como fallback
+            // --- PASSO 3: REGRAS DE NEGÓCIO ---
             DateTime horaRegistro;
             if (dataHora.HasValue)
             {
@@ -95,34 +99,31 @@ namespace ApiRefeicoes.Controllers
             }
             else
             {
-                // Fallback para hora do servidor se o dispositivo não mandar
-                horaRegistro = DateTime.UtcNow.AddHours(-3); // UTC-3 Brasil simples
+                horaRegistro = DateTime.UtcNow.AddHours(-3);
                 _logger.LogWarning("Data/hora não enviada pelo dispositivo. Usando horário do servidor: {DataHora}", horaRegistro);
             }
 
             var tipoRefeicaoAtual = GetTipoRefeicaoAtual(horaRegistro);
             var dataHoje = horaRegistro.Date;
 
-            // Verifica se JÁ existe um registro para este colaborador, neste dia, para esta refeição
             var jaComeuHoje = await _context.RegistroRefeicoes
                 .AnyAsync(r => r.ColaboradorId == colaborador.Id
                             && r.TipoRefeicao == tipoRefeicaoAtual.ToString()
                             && r.DataHoraRegistro >= dataHoje
                             && r.DataHoraRegistro < dataHoje.AddDays(1));
 
-            // Define se gera alerta ou não
             bool gerarAlerta = jaComeuHoje;
             string mensagemRetorno = jaComeuHoje
-                ? $"ALERTA: {tipoRefeicaoAtual} já registrada hoje. Registro duplicado gerado para o portal."
+                ? $"ALERTA: {tipoRefeicaoAtual} já registrada hoje."
                 : $"{tipoRefeicaoAtual} registrada com sucesso.";
 
             // --- PASSO 4: REGISTRO (SEMPRE GRAVA) ---
-            var valorRefeicao = _configuration.GetValue<decimal>("Configuracoes:ValorRefeicaoPadrao", 0m);
+            var valorRefeicao = _configuration.GetValue<decimal>("Configuracoes:ValorRefeicaoPadrao", 17m);
 
             var registro = new RegistroRefeicao
             {
                 ColaboradorId = colaborador.Id,
-                DataHoraRegistro = horaRegistro, // Grava a hora definida acima
+                DataHoraRegistro = horaRegistro,
                 TipoRefeicao = tipoRefeicaoAtual.ToString(),
                 NomeColaborador = colaborador.Nome,
                 NomeDepartamento = colaborador.Departamento?.Nome ?? "N/A",
@@ -130,19 +131,17 @@ namespace ApiRefeicoes.Controllers
                 NomeFuncao = colaborador.Funcao?.Nome ?? "N/A",
                 ValorRefeicao = valorRefeicao,
                 ParadaDeFabrica = false,
-                RefeicaoExcedente = gerarAlerta
+                RefeicaoExcedente = gerarAlerta,
+
+                // --- NOVO: SALVA A FOTO ---
+                FotoRegistro = fotoBytes
             };
 
             _context.RegistroRefeicoes.Add(registro);
 
-            // --- DEBUG CRÍTICO PARA O BANCO DE DADOS ---
             try
             {
-                _logger.LogWarning("TENTANDO SALVAR NO BANCO... Connection String Atual: {Conn}", _context.Database.GetDbConnection().ConnectionString);
-
                 var linhasAfetadas = await _context.SaveChangesAsync();
-
-                _logger.LogWarning("RESULTADO DO SAVE: {Qtd} linhas afetadas. ID do novo registro: {Id}", linhasAfetadas, registro.Id);
 
                 if (linhasAfetadas == 0)
                 {
@@ -154,16 +153,11 @@ namespace ApiRefeicoes.Controllers
                 _logger.LogError(ex, "ERRO FATAL AO CHAMAR SaveChangesAsync()");
                 throw;
             }
-            // -------------------------------------------
 
             if (gerarAlerta)
-            {
-                _logger.LogWarning("Refeição EXCEDENTE registrada para {Nome} em {Data}.", colaborador.Nome, horaRegistro);
-            }
+                _logger.LogWarning("Refeição EXCEDENTE registrada para {Nome}.", colaborador.Nome);
             else
-            {
-                _logger.LogInformation("Sucesso: {Refeicao} registrada para {Nome} em {Data}.", tipoRefeicaoAtual, colaborador.Nome, horaRegistro);
-            }
+                _logger.LogInformation("Sucesso: {Refeicao} registrada para {Nome}.", tipoRefeicaoAtual, colaborador.Nome);
 
             return Ok(new { Sucesso = true, Mensagem = mensagemRetorno, Alerta = gerarAlerta });
         }

@@ -36,5 +36,6 @@ namespace ApiRefeicoes.Models
         // NOVO CAMPO: Indica que o limite de 1 refeição foi excedido. 
         // O Portal deve ler este campo para exibir o "Alerta".
         public bool RefeicaoExcedente { get; set; } = false;
-    }
+        public byte[]? FotoRegistro { get; set; }
+     }
 }
